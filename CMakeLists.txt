@@ -1273,7 +1273,9 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 			"-sALLOW_MEMORY_GROWTH -sMINIFY_HTML=0 -sMODULARIZE -sEXPORT_NAME=createEasyRpgPlayer \
 			 -sEXIT_RUNTIME=0 --bind --pre-js ${PLAYER_JS_PREJS} --post-js ${PLAYER_JS_POSTJS} \
 			 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$autoResumeAudioContext','$dynCall'] \
+			 -sEXPORTED_FUNCTIONS=_main,_malloc,_free \
 			 -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8'] \
+			 -sGL_ENABLE_GET_PROC_ADDRESS")
 			 -sEXPORTED_FUNCTIONS=_main,_malloc,_free")
 		set_source_files_properties("src/platform/sdl/main.cpp" PROPERTIES
 			OBJECT_DEPENDS "${PLAYER_JS_PREJS};${PLAYER_JS_POSTJS};${PLAYER_JS_SHELL}")
