@@ -94,12 +94,6 @@ public:
 	std::array<int, 5> last_flash_frame_flash;
 	std::map<int, std::array<int, 5>> repeating_flashes;
 
-	int cu_randint;
-	int cu_time_days;
-	int cu_time_hours;
-	int cu_temperature;
-	int cu_precipitation;
-
 	void SpawnOtherPlayer(int id);
 	void ResetRepeatingFlash();
 	void InitConnection();
