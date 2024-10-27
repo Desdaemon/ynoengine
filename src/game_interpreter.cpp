@@ -45,6 +45,7 @@
 #include "game_interpreter_control_variables.h"
 #include "game_windows.h"
 #include "maniac_patch.h"
+#include "oneshot.h"
 #include "spriteset_map.h"
 #include "sprite_character.h"
 #include "scene_gameover.h"
@@ -1076,6 +1077,7 @@ bool Game_Interpreter::CommandControlSwitches(lcf::rpg::EventCommand const& com)
 
 		for (int i = start; i <= end; ++i) {
 			GMI().SwitchSet(i, Main_Data::game_switches->GetInt(i));
+			Oneshot().SwitchSet(i, Main_Data::game_switches->GetInt(i));
 		}
 
 		Game_Map::SetNeedRefresh(true);

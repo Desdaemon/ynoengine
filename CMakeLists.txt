@@ -479,6 +479,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/multiplayer/chatname.h
 	src/multiplayer/playerother.h
 	src/multiplayer/playerother.cpp
+	src/oneshot.h
+	src/oneshot.cpp
 	src/external/TinySHA1.hpp
 )
 

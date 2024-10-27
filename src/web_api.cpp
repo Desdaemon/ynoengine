@@ -104,3 +104,13 @@ bool Web_API::ShouldConnectPlayer(std::string_view uuid) {
 	}, uuid.data(), uuid.size());
 	return result == 1;
 }
+
+std::string Web_Api::GetPlayerName() {
+	return reinterpret_cast<char*>(EM_ASM_INT({
+		var name = getPlayerName();
+	  var len = lengthBytesUTF8(name)+1;
+	  var wasm_str = _malloc(len);
+	  stringToUTF8(name, wasm_str, len);
+	  return wasm_str;
+	}));
+}
