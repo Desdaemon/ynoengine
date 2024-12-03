@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.18...3.31 FATAL_ERROR)
 project(EasyRPG_Player VERSION 0.8.1
 	DESCRIPTION "Interpreter for RPG Maker 2000/2003 games"
 	HOMEPAGE_URL "https://easyrpg.org"
-	LANGUAGES CXX)
+	LANGUAGES C CXX)
 
 # Extra CMake Module files
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/builds/cmake/Modules")
@@ -12,6 +12,8 @@ include(PlayerConfigureWindows)
 include(PlayerFindPackage)
 include(PlayerBuildType)
 include(PlayerMisc)
+include(GetGitRevisionDescription)
+include(CheckCSourceCompiles)
 
 # Dependencies provided by CMake Presets
 option(PLAYER_FIND_ROOT_PATH_APPEND
@@ -1008,7 +1010,32 @@ else()
 		CONDITION PLAYER_WITH_NLOHMANN_JSON
 		DEFINITION HAVE_NLOHMANN_JSON
 		TARGET nlohmann_json::nlohmann_json
-		ONLY_CONFIG)
+		ONLY_CONFIG
+	)
+
+	find_package(Libwebsockets CONFIG REQUIRED)
+	require_lws_config(LWS_ROLE_H1 1 requirements)
+	require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
+	require_lws_config(LWS_WITH_SECURE_STREAMS 1 requirements)
+	# require_lws_config(LWS_WITH_SECURE_STREAMS_CPP 1 requirements)
+	require_lws_config(LWS_WITH_SECURE_STREAMS_STATIC_POLICY_ONLY 0 requirements)
+	require_lws_config(LWS_WITH_TLS 1 requirements)
+	require_lws_config(LWS_WITH_SECURE_STREAMS_AUTH_SIGV4 0 requirements)
+
+	# uses system trust store
+	require_lws_config(LWS_WITH_MBEDTLS 0 requirements)
+	require_lws_config(LWS_WITH_WOLFSSL 0 requirements)
+	require_lws_config(LWS_WITH_CYASSL 0 requirements)
+
+	# require_lws_config(LWS_WITH_SYS_FAULT_INJECTION 1 has_fault_injection)
+	# require_lws_config(LWS_WITH_SECURE_STREAMS_PROXY_API 1 has_ss_proxy)
+	# require_lws_config(LWS_WITH_SYS_STATE 1 has_sys_state)
+	if(websockets_shared)
+		target_link_libraries(${PROJECT_NAME} websockets_shared ${LIBWEBSOCKETS_DEP_LIBS})
+		add_dependencies(${PROJECT_NAME} websockets_shared)
+	else()
+		target_link_libraries(${PROJECT_NAME} websockets ${LIBWEBSOCKETS_DEP_LIBS})
+	endif()
 endif()
 
 # Configure Audio backends
