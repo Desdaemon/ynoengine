@@ -30,6 +30,7 @@
 #  include <SDL_system.h>
 #elif defined(EMSCRIPTEN)
 #  include <emscripten.h>
+#  include "platform/emscripten/audio.h"
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
 #endif
