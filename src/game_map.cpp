@@ -56,7 +56,7 @@
 #include <lcf/rpg/save.h>
 #include "scene_gameover.h"
 #include "multiplayer/game_multiplayer.h"
-#include <emscripten/emscripten.h>
+#include "web_api.h"
 #include "feature.h"
 
 namespace {
@@ -338,11 +338,7 @@ std::unique_ptr<lcf::rpg::Map> Game_Map::LoadMapFile(int map_id, bool map_change
 
 	Output::Debug("Loaded Map {}", map_name);
 
-	if (map_changed) {
-		EM_ASM({
-			onLoadMap(UTF8ToString($0));
-		}, map_name.c_str());
-	}
+	Web_API::OnLoadMap(map_name);
 
 	if (map.get() == NULL) {
 		Output::ErrorStr(lcf::LcfReader::GetError());
