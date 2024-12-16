@@ -375,6 +375,27 @@ namespace S2C {
 		int temperature;
 		int precipitation;
 	};
+#ifndef EMSCRIPTEN
+	class SessionGSay : public S2CPacket {
+	public:
+		SessionGSay(const PL& v)
+			: uuid(v.at(0)),
+			mapid(v.at(1)),
+			prevmapid(v.at(2)),
+			prevlocsstr(v.at(3)),
+			x(stoi((std::string)v.at(4))),
+			y(stoi((std::string)v.at(5))),
+			msg(v.at(6)),
+			msgid(v.at(7)) {}
+		int x, y;
+		std::string uuid;
+		std::string mapid;
+		std::string prevmapid;
+		std::string prevlocsstr;
+		std::string msg;
+		std::string msgid;
+	};
+#endif
 }
 namespace C2S {
 	using C2SPacket = Multiplayer::C2SPacket;
@@ -606,7 +627,16 @@ namespace C2S {
 		int event_id;
 		int action_bin;
 	};
-
+#ifndef EMSCRIPTEN
+	class SessionPlayerName : public C2SPacket {
+	public:
+		SessionPlayerName(std::string name_) : C2SPacket("name"),
+			name(name_) {}
+		std::string ToBytes() const override { return Build(name); }
+	protected:
+		std::string name;
+	};
+#endif
 }
 }
 

@@ -1019,11 +1019,11 @@ else()
 	find_package(Libwebsockets CONFIG REQUIRED)
 	require_lws_config(LWS_ROLE_H1 1 requirements)
 	require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
-	require_lws_config(LWS_WITH_SECURE_STREAMS 1 requirements)
+	# require_lws_config(LWS_WITH_SECURE_STREAMS 1 requirements)
 	# require_lws_config(LWS_WITH_SECURE_STREAMS_CPP 1 requirements)
-	require_lws_config(LWS_WITH_SECURE_STREAMS_STATIC_POLICY_ONLY 0 requirements)
+	# require_lws_config(LWS_WITH_SECURE_STREAMS_STATIC_POLICY_ONLY 0 requirements)
 	require_lws_config(LWS_WITH_TLS 1 requirements)
-	require_lws_config(LWS_WITH_SECURE_STREAMS_AUTH_SIGV4 0 requirements)
+	# require_lws_config(LWS_WITH_SECURE_STREAMS_AUTH_SIGV4 0 requirements)
 
 	# uses system trust store
 	require_lws_config(LWS_WITH_MBEDTLS 0 requirements)
@@ -1039,6 +1039,13 @@ else()
 	else()
 		target_link_libraries(${PROJECT_NAME} websockets ${LIBWEBSOCKETS_DEP_LIBS})
 	endif()
+
+	#find_package(websocketpp REQUIRED)
+	#add_dependencies(${PROJECT_NAME} websocketpp::websocketpp)
+	#find_package(httplib CONFIG REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} httplib::httplib)
+	find_package(cpr CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} cpr::cpr)
 endif()
 
 # Configure Audio backends
@@ -1230,7 +1237,8 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 	if(WIN32)
 		# Open console for Debug builds
-		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 
 		# Add resources
 		string(REPLACE "." "," RC_VERSION ${PROJECT_VERSION})
@@ -1245,6 +1253,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 		# Change executable name
 		set_target_properties(${EXE_NAME} PROPERTIES OUTPUT_NAME "Player")
+		target_link_libraries(${EXE_NAME} dbghelp)
 	endif()
 
 	target_link_libraries(${EXE_NAME} ${PROJECT_NAME})
