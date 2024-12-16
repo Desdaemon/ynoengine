@@ -794,7 +794,7 @@ public:
 	 *
 	 * @return Rpg2k3 hero class name
 	 */
-	StringView GetClassName() const;
+	StringView ClassName() const;
 
 	/**
 	 * Gets battle commands.

@@ -20,6 +20,7 @@ public:
 
 	void Connect(int map_id, bool room_switch = false);
 	void Initialize();
+	void InitSession();
 	void Quit();
 	void Update();
 	void SendBasicData();
@@ -60,6 +61,9 @@ public:
 	} settings;
 
 	YNOConnection connection;
+#ifndef EMSCRIPTEN
+	YNOConnection sessionConn;
+#endif
 	bool session_active{ false }; // if true, it will automatically reconnect when disconnected
 	bool session_connected{ false };
 	bool switching_room{ true }; // when client enters new room, but not synced to server
