@@ -9,6 +9,8 @@
 using namespace Web_API;
 
 std::string Web_API::GetSocketURL() {
+	return "wss://connect.ynoproject.net/2kki/";
+	//return "wss://localhost:8028/backend/2kki/";
 	return reinterpret_cast<char*>(EM_ASM_INT({
 	  var ws = Module.wsUrl;
 	  var len = lengthBytesUTF8(ws)+1;
@@ -103,6 +105,7 @@ void Web_API::ShowToastMessage(std::string_view msg, std::string_view icon) {
 }
 
 bool Web_API::ShouldConnectPlayer(std::string_view uuid) {
+	return true;
 	int result = EM_ASM_INT({
 		return shouldConnectPlayer(UTF8ToString($0, $1)) ? 1 : 0;
 	}, uuid.data(), uuid.size());

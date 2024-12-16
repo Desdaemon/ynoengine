@@ -841,7 +841,7 @@ public:
 	 *
 	 * @return Rpg2k3 hero class name
 	 */
-	std::string_view GetClassName() const;
+	StringView ClassName() const;
 
 	/**
 	 * Gets battle commands.
