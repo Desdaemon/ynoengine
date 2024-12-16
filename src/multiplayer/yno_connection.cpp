@@ -1,52 +1,62 @@
 #include "yno_connection.h"
 #include "multiplayer/packet.h"
 #include "output.h"
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <cctype>
 #ifdef __EMSCRIPTEN__
 #  include <emscripten/websocket.h>
 #else
 #  include <libwebsockets.h>
 #  include <thread>
+#  include <uv.h>
+#  include <cpr/cpr.h>
 #endif
 #include "../external/TinySHA1.hpp"
+
+namespace {
+	std::shared_ptr<WebSocketClient> _sessionclient;
+	std::string session_token;
+}
 
 struct YNOConnection::IMPL {
 #ifdef __EMSCRIPTEN__
 	EMSCRIPTEN_WEBSOCKET_T socket;
 #else
-	lws_ss_handle* handle;
-	lws_context* cx;
+	std::shared_ptr<WebSocketClient> _wsclient;
+	WebSocketClient* GetWsClient() { return _wsclient.get(); };
 #endif
 
-	uint32_t msg_count;
-	bool closed;
+	uint32_t msg_count = 0;
+	bool closed = true;
 
-#ifdef __EMSCRIPTEN__
-	static bool onopen(int eventType, const EmscriptenWebSocketOpenEvent *event, void *userData) {
+	static bool onopen_common(void* userData) {
 		auto _this = static_cast<YNOConnection*>(userData);
 		_this->SetConnected(true);
 		_this->DispatchSystem(SystemMessage::OPEN);
 		return true;
 	}
-	static bool onclose(int eventType, const EmscriptenWebSocketCloseEvent *event, void *userData) {
+	static bool onclose_common(bool exit, void* userData) {
 		auto _this = static_cast<YNOConnection*>(userData);
 		_this->SetConnected(false);
 		_this->DispatchSystem(
-			event->code == 1028 ?
+			exit ?
 			SystemMessage::EXIT :
 			SystemMessage::CLOSE
 		);
 		return true;
 	}
-	static bool onmessage(int eventType, const EmscriptenWebSocketMessageEvent *event, void *userData) {
+	static bool onmessage_common(const std::string& cstr, void* userData, bool isText) {
 		auto _this = static_cast<YNOConnection*>(userData);
 		// IMPORTANT!! numBytes is always one byte larger than the actual length
 		// so the actual length is numBytes - 1
 
 		// NOTE: that extra byte is just in text mode, and it does not exist in binary mode
-		if (event->isText) {
+		if (isText) {
 			return false;
 		}
-		std::string_view cstr(reinterpret_cast<const char*>(event->data), event->numBytes);
+		//std::string_view cstr(reinterpret_cast<const char*>(data), dlen);
 		std::vector<std::string_view> mstrs = Split(cstr, Multiplayer::Packet::MSG_DELIM);
 		for (auto& mstr : mstrs) {
 			auto p = mstr.find(Multiplayer::Packet::PARAM_DELIM);
@@ -58,7 +68,8 @@ struct YNOConnection::IMPL {
 				duplicated code because the statement in else clause will handle it.
 				*/
 				_this->Dispatch(mstr);
-			} else {
+			}
+			else {
 				auto namestr = mstr.substr(0, p);
 				auto argstr = mstr.substr(p + Multiplayer::Packet::PARAM_DELIM.size());
 				_this->Dispatch(namestr, Split(argstr));
@@ -66,149 +77,204 @@ struct YNOConnection::IMPL {
 		}
 		return true;
 	}
-#else
-	struct yno_socket_t {
-		struct lws_ss_handle* ss;
-		void* opaque_data;
-
-		// custom logic fields begin
-		YNOConnection* conn;
-		std::deque<uint8_t> queue;
-		// custom logic fields end
-
-		lws_sorted_usec_list_t sul;
-		int count;
-		bool due;
-	};
-
-	static lws_ss_state_return_t yno_socket_rx(void* userData, const uint8_t* in, size_t len, int flags)
-	{
-		auto* self = static_cast<yno_socket_t*>(userData);
-		auto* h = self->ss;
-
-		std::string_view cstr(reinterpret_cast<const char*>(in), len);
-		std::vector<std::string_view> mstrs = Split(cstr, Multiplayer::Packet::MSG_DELIM);
-		for (auto& mstr : mstrs) {
-			auto p = mstr.find(Multiplayer::Packet::PARAM_DELIM);
-			if (p == mstr.npos) {
-				/*
-				Usually npos is the maximum value of size_t.
-				Adding to it is undefined behavior.
-				If it returns end iterator instead of npos, the if statement is
-				duplicated code because the statement in else clause will handle it.
-				*/
-				self->conn->Dispatch(mstr);
-			} else {
-				auto namestr = mstr.substr(0, p);
-				auto argstr = mstr.substr(p + Multiplayer::Packet::PARAM_DELIM.size());
-				self->conn->Dispatch(namestr, Split(argstr));
-			}
-		}
-		return LWSSSSRET_OK;
-	}
-
-	static constexpr uint RATE_US = 50000;
-	static constexpr size_t PKT_SIZE = 80;
-
-	static void yno_socket_txcb(struct lws_sorted_usec_list* sul)
-	{
-		auto* self = lws_container_of(sul, yno_socket_t, sul);
-
-		self->due = true;
-		if (lws_ss_request_tx(self->ss) != LWSSSSRET_OK) {
-			// TODO: The fuck you expect me to do?
-		}
-
-		lws_sul_schedule(lws_ss_get_context(self->ss), 0, &self->sul, yno_socket_txcb, RATE_US);
-	}
-
-	static lws_ss_state_return_t yno_socket_tx(void *userobj, lws_ss_tx_ordinal_t ord, uint8_t *buf, size_t *len, int *flags)
-	{
-		auto* self = static_cast<yno_socket_t *>(userobj);
-		if (!self->due)
-			return LWSSSSRET_TX_DONT_SEND;
-
-		self->due = false;
-
-		auto& queue = self->queue;
-		if (queue.empty())
-			return LWSSSSRET_TX_DONT_SEND;
-
-		size_t _len = *len = std::min(queue.size(), PKT_SIZE);
-		std::copy(queue.begin(), queue.begin() + _len, buf);
-		queue.erase(queue.begin(), queue.begin() + _len);
-
-		*flags = LWSSS_FLAG_SOM | LWSSS_FLAG_EOM;
-
-		self->count++;
-
-		lws_sul_schedule(lws_ss_get_context(self->ss), 0, &self->sul, yno_socket_txcb, RATE_US);
-
-		return LWSSSSRET_OK;
-	}
-
-
-	static lws_ss_state_return_t yno_socket_state(void* userData, void* h_src, lws_ss_constate_t state, lws_ss_tx_ordinal_t sck)
-	{
-		auto* self = static_cast<yno_socket_t*>(userData);
-		switch (state) {
-		case LWSSSCS_CREATING:
-			return lws_ss_request_tx(self->ss);
-		case LWSSSCS_CONNECTED:
-			self->conn->SetConnected(true);
-			self->conn->DispatchSystem(SystemMessage::OPEN);
-			lws_sul_schedule(lws_ss_get_context(self->ss), 0, &self->sul, yno_socket_txcb, RATE_US);
-			break;
-		case LWSSSCS_DISCONNECTED:
-			self->conn->SetConnected(false);
-			self->conn->DispatchSystem(SystemMessage::CLOSE);
-			lws_sul_cancel(&self->sul);
-			break;
-		default:
-			break;
-		}
-		return LWSSSSRET_OK;
-	}
-
-	static constexpr lws_ss_info_t ssi {
-		.streamtype = "yno",
-		.user_alloc = sizeof(yno_socket_t),
-		.handle_offset = offsetof(yno_socket_t, ss),
-		.opaque_user_data_offset = offsetof(yno_socket_t, opaque_data),
-		.rx = yno_socket_rx,
-		.tx = yno_socket_tx,
-		.state = yno_socket_state,
-	};
-#endif
 
 #ifdef __EMSCRIPTEN__
+	static bool onopen(int eventType, const EmscriptenWebSocketOpenEvent *event, void *userData) {
+		return onopen_common(userData);
+	}
+	static bool onclose(int eventType, const EmscriptenWebSocketCloseEvent *event, void *userData) {
+		return onclose_common(event->code == 1028, event->data, event->numBytes, userData);
+	}
+	static bool onmessage(int eventType, const EmscriptenWebSocketMessageEvent *event, void *userData) {
+		return onmessage_common(std::string_view(reinterpret_cast<const char*>(event->data, event->numBytes)), userData, event->isText);
+	}
 	static void set_callbacks(int socket, void* userData) {
 		emscripten_websocket_set_onopen_callback(socket, userData, onopen);
 		emscripten_websocket_set_onclose_callback(socket, userData, onclose);
 		emscripten_websocket_set_onmessage_callback(socket, userData, onmessage);
 	}
 #else
-	void initWs(const lws_ss_policy* policy) {
-		lws_set_log_level(LLL_USER | LLL_ERR | LLL_WARN | LLL_NOTICE, nullptr);
-		lws_context_creation_info info {
-			.protocols = lws_sspc_protocols,
-			.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT,
-			.fd_limit_per_thread = 1 + 6 + 1,
-			.port = CONTEXT_PORT_NO_LISTEN,
-			.pss_policies = policy,
-		};
-		cx = lws_create_context(&info);
-		if (!cx) Output::ErrorStr("lws_create_context failed");
-
-		if (lws_ss_create(cx, 0, &ssi, nullptr, &handle, nullptr, nullptr))
-			Output::ErrorStr("lws_ss_create failed");
-
-		std::thread event_thread([](lws_context* cx) {
-			while (!lws_service(cx, 0));
-		}, cx);
+	void set_callbacks(void* userData) {
+		assert(_wsclient && "wsclient not initialized");
+		_wsclient->SetUserData(userData);
+		_wsclient->RegisterOnConnect(onopen_common);
+		_wsclient->RegisterOnDisconnect(onclose_common);
+		_wsclient->RegisterOnMessage([](const std::string& str, void* userdata) { return onmessage_common(str, userdata, false); });
+	}
+	void create_client(const std::string& url) {
+		//if (_wsclient) _wsclient->Stop();
+		_wsclient.reset(new WebSocketClient(url));
+		//_wsclient->Start();
+	}
+	void start() {
+		_wsclient->Start();
 	}
 #endif
 };
+
+#ifndef EMSCRIPTEN
+WebSocketClient::WebSocketClient(const std::string& url) : url_(url), context_(nullptr), wsi_(nullptr), running_(false), userdata_(nullptr) {
+}
+
+WebSocketClient::~WebSocketClient() {
+	Stop();
+}
+
+void WebSocketClient::Start() {
+	if (running_) return;
+
+	struct lws_context_creation_info info = {};
+	info.options = 0
+		| LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT
+		| LWS_SERVER_OPTION_LIBUV
+		;
+	uv_loop_t* loop = uv_default_loop();
+	info.protocols = protocols_;
+	info.foreign_loops = (void **)&loop;
+	info.port = CONTEXT_PORT_NO_LISTEN;
+	info.fd_limit_per_thread = 1 + 1 + 1;
+	info.user = this;
+
+	context_ = lws_create_context(&info);
+	if (!context_) {
+		Output::ErrorStr("Failed to create LWS context");
+	}
+
+	const char *prot, *addr, *path;
+	int port;
+	if (lws_parse_uri(url_.data(), &prot, &addr, &port, &path)) {
+		Output::Error("Invalid wsurl: {}", url_);
+	}
+
+	lws_client_connect_info ccinfo{};
+	ccinfo.context = context_;
+	ccinfo.address = addr;
+	ccinfo.port = port;
+	ccinfo.path = path;
+	ccinfo.host = ccinfo.address;
+	ccinfo.origin = lws_canonical_hostname(context_);
+	ccinfo.ssl_connection = LCCSCF_USE_SSL;
+	ccinfo.protocol = protocols_[0].name;
+
+	wsi_ = lws_client_connect_via_info(&ccinfo);
+	if (!wsi_) {
+		lws_context_destroy(context_);
+		Output::ErrorStr("Failed to connect to the WebSocket server");
+	}
+
+	running_.store(true, std::memory_order_acquire);
+}
+
+void WebSocketClient::Stop() {
+	Output::Debug("Stopping {}", url_);
+	if (!running_) return;
+	running_.store(false, std::memory_order_release);
+	lws_set_timeout(wsi_, PENDING_TIMEOUT_AWAITING_PROXY_RESPONSE, LWS_TO_KILL_ASYNC);
+}
+
+void WebSocketClient::Send(std::string_view data) {
+	std::lock_guard _guard(bmutex_);
+	buffer_.insert(buffer_.end(), data.begin(), data.end());
+}
+
+int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons reason,
+	void* user, void* in, size_t len) {
+
+	WebSocketClient* client = reinterpret_cast<WebSocketClient*>(lws_context_user(lws_get_context(wsi)));
+
+	switch (reason) {
+	case LWS_CALLBACK_CLIENT_ESTABLISHED:
+		if (!client->running_ && client->ready_) return -1;
+		client->ready_ = true;
+		if (client->on_connect_) client->on_connect_(client->userdata_);
+		break;
+
+	case LWS_CALLBACK_CLIENT_WRITEABLE: {
+		if (!client->running_ && client->ready_) return -1;
+		if (!client->buffer_.empty()) {
+			size_t current_size = client->buffer_.size();
+			std::lock_guard _guard(client->bmutex_);
+
+			std::vector<unsigned char> buffer;
+			buffer.resize(LWS_PRE + current_size);
+			buffer.insert(buffer.begin() + LWS_PRE, client->buffer_.begin(), client->buffer_.end());
+			client->buffer_.clear();
+
+			if (lws_write(wsi, &buffer[LWS_PRE], current_size, LWS_WRITE_BINARY) < current_size) {
+				return -1;
+			}
+		}
+	} break;
+
+	case LWS_CALLBACK_CLIENT_RECEIVE:
+		if (!client->running_ && client->ready_) return -1;
+		if (client->on_message_) {
+			//Output::Debug("Receiving {} bytes from {}", len, client->url_);
+			std::string message(reinterpret_cast<const char*>(in), len);
+			client->on_message_(message, client->userdata_);
+		}
+		else
+			Output::Warning("{}: no on_message defined", client->url_);
+		break;
+
+	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+		if (client->on_disconnect_) {
+			lcf::Span<unsigned char> close_span(
+				lws_get_close_payload(wsi),
+				lws_get_close_length(wsi)
+			);
+			bool exit = false;
+			if (close_span.size() >= 2) {
+				int16_t close_reason = static_cast<int16_t>((close_span[0] << 8) | close_span[1]);
+				exit = close_reason == 1028;
+			}
+			client->on_disconnect_(exit, client->userdata_);
+		}
+		client->running_.store(false, std::memory_order_release);
+		break;
+
+	case LWS_CALLBACK_CLIENT_CLOSED:
+		client->running_.store(false, std::memory_order_release);
+		if (client->on_disconnect_) {
+			client->on_disconnect_(false, client->userdata_);
+		}
+		break;
+
+	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+		Output::Warning("LWS error: {} ({})", std::string((const char*)in, len), client->url_);
+		client->running_.store(false, std::memory_order_release);
+		if (client->on_disconnect_) {
+			client->on_disconnect_(false, client->userdata_);
+		}
+		break;
+
+	case LWS_CALLBACK_EVENT_WAIT_CANCELLED:
+		if (client->ready_) {
+			Output::Warning("{}: event wait cancelled", client->url_);
+			client->running_.store(false, std::memory_order_release);
+		}
+		break;
+
+	//case LWS_CALLBACK_OPENSSL_PERFORM_SERVER_CERT_VERIFICATION:
+	//	X509_STORE_CTX_set_error((X509_STORE_CTX*)user, X509_V_OK);
+	//	break;
+
+	//case LWS_CALLBACK_LOCK_POLL:
+	//case LWS_CALLBACK_UNLOCK_POLL:
+	//case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
+	//case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+	//case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+	//case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
+	//	break;
+
+	//default:
+	//	Output::Debug("Unhandled {}", (int)reason);
+	//	break;
+	}
+
+	return 0;
+}
+#endif
 
 const size_t YNOConnection::MAX_QUEUE_SIZE{ 4088 };
 
@@ -220,8 +286,10 @@ YNOConnection::YNOConnection() : impl(new IMPL) {
 
 YNOConnection::YNOConnection(YNOConnection&& o)
 	: Connection(std::move(o)), impl(std::move(o.impl)) {
-#ifdef __EMSCRIPTEN__
+#ifdef EMSCRIPTEN
 	IMPL::set_callbacks(impl->socket, this);
+#else
+	impl->set_callbacks(this);
 #endif
 }
 YNOConnection& YNOConnection::operator=(YNOConnection&& o) {
@@ -229,8 +297,10 @@ YNOConnection& YNOConnection::operator=(YNOConnection&& o) {
 	if (this != &o) {
 		Close();
 		impl = std::move(o.impl);
-#ifdef __EMSCRIPTEN__
+#ifdef EMSCRIPTEN
 		IMPL::set_callbacks(impl->socket, this);
+#else
+		impl->set_callbacks(this);
 #endif
 	}
 	return *this;
@@ -246,8 +316,8 @@ void YNOConnection::Open(std::string_view uri) {
 		Close();
 	}
 
-#ifdef __EMSCRIPTEN__
 	std::string s {uri};
+#ifdef __EMSCRIPTEN__
 	EmscriptenWebSocketCreateAttributes ws_attrs = {
 		s.data(),
 		"binary",
@@ -257,13 +327,10 @@ void YNOConnection::Open(std::string_view uri) {
 	impl->closed = false;
 	IMPL::set_callbacks(impl->socket, this);
 #else
-	const lws_ss_policy_t yno_policy {
-		.streamtype = "yno",
-		.endpoint = uri.data(),
-		.port = 443,
-		.protocol = (uint8_t)(uri.find("wss") == 0 ? 1 : 0),
-	};
-	impl->initWs(&yno_policy);
+	impl->create_client(s);
+	impl->closed = false;
+	impl->set_callbacks(this);
+	impl->start();
 #endif
 }
 
@@ -279,7 +346,7 @@ void YNOConnection::Close() {
 	emscripten_websocket_close(impl->socket, 0, nullptr);
 	emscripten_websocket_delete(impl->socket);
 #else
-	if (impl->handle) lws_ss_destroy(&impl->handle);
+	// handled by create_client
 #endif
 }
 
@@ -292,17 +359,9 @@ std::string_view as_bytes(const T& v) {
 	);
 }
 
-// poor method to test current endian
-// need improvement
-bool is_big_endian() {
-	union endian_tester {
-		uint16_t num;
-		char layout[2];
-	};
-
-	endian_tester t;
-	t.num = 1;
-	return t.layout[0] == 0;
+static bool is_big_endian() {
+	const uint16_t n = 0x1;
+	return reinterpret_cast<const char*>(&n)[0] == 0x00;
 }
 
 std::string reverse_endian(std::string src) {
@@ -331,6 +390,7 @@ std::string as_big_endian_bytes(T v) {
 const unsigned char psk[] = {};
 
 std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg) {
+	Output::Debug("header key={} count={}", key, count);
 	std::string hashmsg{as_bytes(psk)};
 	hashmsg += as_big_endian_bytes(key);
 	hashmsg += as_big_endian_bytes(count);
@@ -353,21 +413,22 @@ void YNOConnection::Send(std::string_view data) {
 #ifdef __EMSCRIPTEN__
 	emscripten_websocket_get_ready_state(impl->socket, &ready);
 #else
-	ready = true; // TODO
+	auto wsclient = impl->GetWsClient();
+	ready = wsclient->Ready();
 #endif
-	if (ready == 1) { // OPEN
+	if (ready) { // OPEN
 		++impl->msg_count;
 		auto sendmsg = calculate_header(GetKey(), impl->msg_count, data);
 		sendmsg += data;
 #ifdef __EMSCRIPTEN__
 		emscripten_websocket_send_binary(impl->socket, sendmsg.data(), sendmsg.size());
 #else
-		auto* socket = lws_container_of(impl->handle, IMPL::yno_socket_t, ss);
-		if (!socket->queue.empty()) {
+		if (!wsclient->Empty()) {
 			auto delim = Multiplayer::Packet::MSG_DELIM;
-			socket->queue.insert(socket->queue.end(), delim.begin(), delim.end());
+			wsclient->Send(delim);
 		}
-		socket->queue.insert(socket->queue.end(), sendmsg.begin(), sendmsg.end());
+		wsclient->Send(sendmsg);
+		wsclient->RequestFlush();
 #endif
 	}
 }

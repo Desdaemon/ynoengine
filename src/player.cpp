@@ -31,6 +31,10 @@
 #  include <emscripten.h>
 #endif
 
+#ifndef EMSCRIPTEN
+#  include <uv.h>
+#endif
+
 #include "async_handler.h"
 #include "audio.h"
 #include "cache.h"
@@ -209,6 +213,8 @@ void Player::Init(std::vector<std::string> args) {
 void Player::Run() {
 	Instrumentation::Init("EasyRPG-Player");
 
+	GMI().InitSession();
+
 	Scene::Push(std::make_shared<Scene_Logo>());
 	Graphics::UpdateSceneCallback();
 
@@ -269,6 +275,8 @@ void Player::MainLoop() {
 
 	Scene::old_instances.clear();
 
+	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+
 	if (!Transition::instance().IsActive() && Scene::instance->type == Scene::Null) {
 		Exit();
 		return;
@@ -286,6 +294,7 @@ void Player::MainLoop() {
 		iframe.End();
 		Game_Clock::SleepFor(next - now);
 	}
+
 }
 
 void Player::Pause() {
