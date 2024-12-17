@@ -23,6 +23,7 @@ public:
 	void Close() override;
 	void Send(std::string_view data) override;
 	void FlushQueue() override;
+	bool need_header = true;
 protected:
 	struct IMPL;
 	std::unique_ptr<IMPL> impl;
