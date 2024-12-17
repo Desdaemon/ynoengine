@@ -152,7 +152,6 @@ void Game_Multiplayer::InitConnection() {
 	connection.RegisterHandler<SyncPlayerDataPacket>("s", [this] (SyncPlayerDataPacket& p) {
 		host_id = p.host_id;
 		auto key_num = std::stoul(p.key);
-		Output::Debug("[{}] syncplayerdata key={}", room_id, key_num);
 		//if (key_num > std::numeric_limits<uint32_t>::max()) {
 		//	std::terminate();
 		//}
@@ -479,10 +478,13 @@ void Game_Multiplayer::InitConnection() {
 	});
 #ifndef EMSCRIPTEN
 	sessionConn.RegisterSystemHandler(YSM::OPEN, [this](MCo&) {
+		if (connection.IsConnected())
+			connection.Close();
 		session_active = true;
+		if (room_id != -1)
+			Connect(room_id);
 	});
 	sessionConn.RegisterSystemHandler(YSM::CLOSE, [this](MCo&) {
-		Output::Error("[session] exited");
 	});
 	sessionConn.RegisterHandler<SessionGSay>("gsay", [](SessionGSay& p) {
 		Output::Debug("{}: {}", p.uuid, p.msg);
@@ -538,7 +540,7 @@ void Game_Multiplayer::InitSession() {
 	header["Content-Type"] = "application/x-www-form-urlencoded";
 
 	auto resp = cpr::Post(
-		cpr::Url{ "https://connect.ynoproject.net/yume/api/login" },
+		cpr::Url{ "https://connect.ynoproject.net/2kki/api/login" },
 		cpr::Body{ formdata },
 		header);
 	if (resp.status_code >= 200 && resp.status_code < 300) {
@@ -548,6 +550,7 @@ void Game_Multiplayer::InitSession() {
 	else {
 		Output::Debug("login: {} {}", resp.status_code, resp.text);
 	}
+	sessionConn.need_header = false;
 	sessionConn.Open(sessionEndpoint);
 #endif
 }
@@ -764,7 +767,8 @@ void Game_Multiplayer::ApplyRepeatingFlashes() {
 void Game_Multiplayer::ApplyTone(Tone tone) {
 	for (auto& p : players) {
 		p.second.sprite->SetTone(tone);
-		p.second.chat_name->SetEffectsDirty();
+		if (p.second.chat_name)
+			p.second.chat_name->SetEffectsDirty();
 	}
 }
 
@@ -893,7 +897,8 @@ void Game_Multiplayer::Update() {
 						}
 					}
 				}
-				p.second.chat_name->SetTransparent(overlap);
+				if (p.second.chat_name)
+					p.second.chat_name->SetTransparent(overlap);
 			}
 		}
 

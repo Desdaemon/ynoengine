@@ -15,11 +15,6 @@
 #endif
 #include "../external/TinySHA1.hpp"
 
-namespace {
-	std::shared_ptr<WebSocketClient> _sessionclient;
-	std::string session_token;
-}
-
 struct YNOConnection::IMPL {
 #ifdef __EMSCRIPTEN__
 	EMSCRIPTEN_WEBSOCKET_T socket;
@@ -56,7 +51,6 @@ struct YNOConnection::IMPL {
 		if (isText) {
 			return false;
 		}
-		//std::string_view cstr(reinterpret_cast<const char*>(data), dlen);
 		std::vector<std::string_view> mstrs = Split(cstr, Multiplayer::Packet::MSG_DELIM);
 		for (auto& mstr : mstrs) {
 			auto p = mstr.find(Multiplayer::Packet::PARAM_DELIM);
@@ -193,12 +187,13 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 		if (!client->running_ && client->ready_) return -1;
 		if (!client->buffer_.empty()) {
 			size_t current_size = client->buffer_.size();
-			std::lock_guard _guard(client->bmutex_);
-
 			std::vector<unsigned char> buffer;
-			buffer.resize(LWS_PRE + current_size);
-			buffer.insert(buffer.begin() + LWS_PRE, client->buffer_.begin(), client->buffer_.end());
-			client->buffer_.clear();
+			{
+				std::lock_guard _guard(client->bmutex_);
+				buffer.resize(LWS_PRE + current_size);
+				buffer.insert(buffer.begin() + LWS_PRE, client->buffer_.begin(), client->buffer_.end());
+				client->buffer_.clear();
+			}
 
 			if (lws_write(wsi, &buffer[LWS_PRE], current_size, LWS_WRITE_BINARY) < current_size) {
 				return -1;
@@ -209,12 +204,9 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 	case LWS_CALLBACK_CLIENT_RECEIVE:
 		if (!client->running_ && client->ready_) return -1;
 		if (client->on_message_) {
-			//Output::Debug("Receiving {} bytes from {}", len, client->url_);
 			std::string message(reinterpret_cast<const char*>(in), len);
 			client->on_message_(message, client->userdata_);
 		}
-		else
-			Output::Warning("{}: no on_message defined", client->url_);
 		break;
 
 	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
@@ -259,17 +251,17 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 	//	X509_STORE_CTX_set_error((X509_STORE_CTX*)user, X509_V_OK);
 	//	break;
 
-	//case LWS_CALLBACK_LOCK_POLL:
-	//case LWS_CALLBACK_UNLOCK_POLL:
-	//case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
-	//case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
-	//case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
-	//case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
-	//	break;
+	case LWS_CALLBACK_LOCK_POLL:
+	case LWS_CALLBACK_UNLOCK_POLL:
+	case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
+	case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+	case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+	case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
+		break;
 
-	//default:
-	//	Output::Debug("Unhandled {}", (int)reason);
-	//	break;
+	default:
+		Output::Debug("Unhandled LWS event {}", (int)reason);
+		break;
 	}
 
 	return 0;
@@ -390,7 +382,6 @@ std::string as_big_endian_bytes(T v) {
 const unsigned char psk[] = {};
 
 std::string calculate_header(uint32_t key, uint32_t count, std::string_view msg) {
-	Output::Debug("header key={} count={}", key, count);
 	std::string hashmsg{as_bytes(psk)};
 	hashmsg += as_big_endian_bytes(key);
 	hashmsg += as_big_endian_bytes(count);
@@ -418,15 +409,15 @@ void YNOConnection::Send(std::string_view data) {
 #endif
 	if (ready) { // OPEN
 		++impl->msg_count;
-		auto sendmsg = calculate_header(GetKey(), impl->msg_count, data);
-		sendmsg += data;
+		std::string sendmsg;
+		if (need_header) {
+			sendmsg = calculate_header(GetKey(), impl->msg_count, data);
+			sendmsg += data;
+		}
+		else sendmsg = data;
 #ifdef __EMSCRIPTEN__
 		emscripten_websocket_send_binary(impl->socket, sendmsg.data(), sendmsg.size());
 #else
-		if (!wsclient->Empty()) {
-			auto delim = Multiplayer::Packet::MSG_DELIM;
-			wsclient->Send(delim);
-		}
 		wsclient->Send(sendmsg);
 		wsclient->RequestFlush();
 #endif
@@ -456,8 +447,14 @@ void YNOConnection::FlushQueue() {
 			bulk += data;
 			m_queue.pop();
 		}
-		if (!bulk.empty())
+		if (!bulk.empty()) {
 			Send(bulk);
+#ifndef EMSCRIPTEN
+			// yield early for this batch, since otherwise the switch room command
+			// has no time to register
+			return;
+#endif
+		}
 		include = !include;
 	}
 }
