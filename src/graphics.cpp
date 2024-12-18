@@ -30,6 +30,9 @@
 #include "drawable_mgr.h"
 #include "baseui.h"
 #include "game_clock.h"
+#ifdef PLAYER_YNO
+#  include "multiplayer/chat_overlay.h"
+#endif
 
 using namespace std::chrono_literals;
 
@@ -40,6 +43,9 @@ namespace Graphics {
 
 	std::unique_ptr<MessageOverlay> message_overlay;
 	std::unique_ptr<FpsOverlay> fps_overlay;
+#ifdef PLAYER_YNO
+	std::unique_ptr<ChatOverlay> chat_overlay;
+#endif
 
 	std::string window_title_key;
 }
@@ -50,11 +56,13 @@ void Graphics::Init() {
 
 	message_overlay = std::make_unique<MessageOverlay>();
 	fps_overlay = std::make_unique<FpsOverlay>();
+	chat_overlay = std::make_unique<ChatOverlay>();
 }
 
 void Graphics::Quit() {
 	fps_overlay.reset();
 	message_overlay.reset();
+	chat_overlay.reset();
 
 	Cache::ClearAll();
 
@@ -108,7 +116,7 @@ void Graphics::Draw(Bitmap& dst) {
 	auto& transition = Transition::instance();
 
 	auto min_z = std::numeric_limits<Drawable::Z_t>::min();
-	auto max_z = std::numeric_limits<Drawable::Z_t>::max();
+	auto constexpr max_z = std::numeric_limits<Drawable::Z_t>::max();
 	if (transition.IsActive()) {
 		min_z = transition.GetZ();
 	} else if (transition.IsErasedNotActive()) {
@@ -149,3 +157,8 @@ MessageOverlay& Graphics::GetMessageOverlay() {
 	return *message_overlay;
 }
 
+#ifdef PLAYER_YNO
+ChatOverlay& Graphics::GetChatOverlay() {
+	return *chat_overlay;
+}
+#endif

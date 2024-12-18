@@ -210,6 +210,7 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 		break;
 
 	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+		client->running_.store(false, std::memory_order_release);
 		if (client->on_disconnect_) {
 			lcf::Span<unsigned char> close_span(
 				lws_get_close_payload(wsi),
@@ -222,7 +223,6 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 			}
 			client->on_disconnect_(exit, client->userdata_);
 		}
-		client->running_.store(false, std::memory_order_release);
 		break;
 
 	case LWS_CALLBACK_CLIENT_CLOSED:

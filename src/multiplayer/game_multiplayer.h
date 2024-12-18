@@ -63,6 +63,9 @@ public:
 	YNOConnection connection;
 #ifndef EMSCRIPTEN
 	YNOConnection sessionConn;
+	std::function<void(std::string_view msg, bool syncing)> on_chat_msg;
+	std::function<void(std::string_view system)> on_system_graphic_change;
+	std::string lastmsgid;
 #endif
 	bool session_active{ false }; // if true, it will automatically reconnect when disconnected
 	bool session_connected{ false };

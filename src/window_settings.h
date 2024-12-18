@@ -37,6 +37,7 @@ public:
 		eInputListButtonsGame,
 		eInputListButtonsEngine,
 		eInputListButtonsDeveloper,
+		eInputListButtonsOnline,
 		eInputButtonOption,
 		eInputButtonAdd,
 		eInputButtonRemove,

@@ -27,6 +27,9 @@
 
 class MessageOverlay;
 class Scene;
+#ifdef PLAYER_YNO
+class ChatOverlay;
+#endif
 
 /**
  * Graphics namespace.
@@ -61,6 +64,8 @@ namespace Graphics {
 	 * @return message overlay
 	 */
 	MessageOverlay& GetMessageOverlay();
+
+	ChatOverlay& GetChatOverlay();
 }
 
 #endif
