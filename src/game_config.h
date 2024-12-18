@@ -143,6 +143,8 @@ struct Game_ConfigVideo {
 	ConfigParam<int> window_width{ "", "", "Video", "WindowWidth", -1 };
 	ConfigParam<int> window_height{ "", "", "Video", "WindowHeight", -1 };
 
+	void* foreign_window_handle = nullptr;
+
 	void Hide();
 };
 
