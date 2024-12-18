@@ -276,6 +276,7 @@ void Scene_Settings::vUpdate() {
 		case Window_Settings::eInputListButtonsGame:
 		case Window_Settings::eInputListButtonsEngine:
 		case Window_Settings::eInputListButtonsDeveloper:
+		case Window_Settings::eInputListButtonsOnline:
 			UpdateOptions();
 			break;
 		case Window_Settings::eEngineFont1:

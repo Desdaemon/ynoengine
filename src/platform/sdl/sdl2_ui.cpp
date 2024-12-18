@@ -364,6 +364,9 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		#endif
 
 		// Create our window
+		if (vcfg.foreign_window_handle) {
+			sdl_window = SDL_CreateWindowFrom(vcfg.foreign_window_handle);
+		} else
 		if (vcfg.window_x.Get() < 0 || vcfg.window_y.Get() < 0 || vcfg.window_height.Get() <= 0 || vcfg.window_width.Get() <= 0) {
 			sdl_window = SDL_CreateWindow(GAME_TITLE,
 				SDL_WINDOWPOS_CENTERED,
@@ -460,17 +463,19 @@ bool Sdl2Ui::RefreshDisplayMode() {
 	} else {
 		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
 #ifndef EMSCRIPTEN
-		bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
-		if (is_fullscreen) {
-			SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		} else {
-			SDL_SetWindowFullscreen(sdl_window, 0);
-			if ((last_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
-					== SDL_WINDOW_FULLSCREEN_DESKTOP) {
-				// Restore to pre-fullscreen size
-				SDL_SetWindowSize(sdl_window, 0, 0);
+		if (!vcfg.foreign_window_handle) {
+			bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+			if (is_fullscreen) {
+				SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
 			} else {
-				SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
+				SDL_SetWindowFullscreen(sdl_window, 0);
+				if ((last_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+						== SDL_WINDOW_FULLSCREEN_DESKTOP) {
+					// Restore to pre-fullscreen size
+					SDL_SetWindowSize(sdl_window, 0, 0);
+				} else {
+					SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
+				}
 			}
 		}
 #endif

@@ -42,6 +42,8 @@
 
 #ifndef EMSCRIPTEN
 #  include <cpr/cpr.h>
+#  include <nlohmann/json.hpp>
+using json = nlohmann::json;
 #endif
 
 static Game_Multiplayer _instance;
@@ -483,11 +485,27 @@ void Game_Multiplayer::InitConnection() {
 		session_active = true;
 		if (room_id != -1)
 			Connect(room_id);
+
+		// sync chat messages
+		if (on_chat_msg) {
+			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMessageId={}", 100, 100, lastmsgid);
+			cpr::Response resp = cpr::Get(cpr::Url{endpoint});
+			if (resp.status_code >= 200 && resp.status_code < 300) {
+				json chatmsgs = json::parse(resp.text);
+				const auto& messages = chatmsgs["messages"];
+				for (auto it = messages.begin(); it != messages.end(); ++it) {
+					on_chat_msg((std::string)(*it)["contents"], it != std::prev(messages.end()));
+				}
+			}
+		}
 	});
 	sessionConn.RegisterSystemHandler(YSM::CLOSE, [this](MCo&) {
 	});
-	sessionConn.RegisterHandler<SessionGSay>("gsay", [](SessionGSay& p) {
+	sessionConn.RegisterHandler<SessionGSay>("gsay", [this](SessionGSay& p) {
 		Output::Debug("{}: {}", p.uuid, p.msg);
+		if (on_chat_msg) {
+			on_chat_msg(p.msg, false);
+		}
 	});
 #endif
 }
@@ -646,6 +664,11 @@ void Game_Multiplayer::MainPlayerTriggeredEvent(int event_id, bool action) {
 void Game_Multiplayer::SystemGraphicChanged(StringView sys) {
 	connection.SendPacketAsync<C2S::SysNamePacket>(ToString(sys));
 	Web_API::OnUpdateSystemGraphic(ToString(sys));
+#ifndef EMSCRIPTEN
+	if (on_system_graphic_change) {
+		on_system_graphic_change(ToString(sys));
+	}
+#endif
 }
 
 void Game_Multiplayer::SePlayed(const lcf::rpg::Sound& sound) {

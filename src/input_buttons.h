@@ -85,6 +85,7 @@ namespace Input {
 		FAST_FORWARD_B,
 		TOGGLE_FULLSCREEN,
 		TOGGLE_ZOOM,
+		SHOW_CHAT,
 		BUTTON_COUNT
 	};
 
@@ -131,6 +132,7 @@ namespace Input {
 		"FAST_FORWARD_B",
 		"TOGGLE_FULLSCREEN",
 		"TOGGLE_ZOOM",
+		"SHOW_CHAT",
 		"BUTTON_COUNT");
 
 	constexpr auto kInputButtonHelp = lcf::makeEnumTags<InputButton>(
@@ -176,6 +178,7 @@ namespace Input {
 		"Run the game at x{} speed",
 		"Toggle Fullscreen mode",
 		"Toggle Window Zoom level",
+		"Toggle chat display",
 		"Total Button Count");
 
 	/**
@@ -191,6 +194,7 @@ namespace Input {
 			case TOGGLE_ZOOM:
 			case FAST_FORWARD_A:
 			case FAST_FORWARD_B:
+			case SHOW_CHAT:
 				return true;
 			default:
 				return false;
