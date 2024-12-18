@@ -158,6 +158,7 @@ void Window_Settings::Refresh() {
 		case eInputListButtonsGame:
 		case eInputListButtonsEngine:
 		case eInputListButtonsDeveloper:
+		case eInputListButtonsOnline:
 			RefreshButtonList();
 			break;
 		default:
@@ -622,6 +623,8 @@ void Window_Settings::RefreshButtonCategory() {
 		[this]() { Push(eInputListButtonsEngine, 1); });
 	AddOption(MenuItem("Developer", "Buttons useful for developers", ""),
 		[this]() { Push(eInputListButtonsDeveloper, 2); });
+	AddOption(MenuItem("Online", "Buttons related to online play", ""),
+		[this]() { Push(eInputListButtonsOnline, 3);  });
 }
 
 void Window_Settings::RefreshButtonList() {
@@ -639,12 +642,14 @@ void Window_Settings::RefreshButtonList() {
 		case 1:
 			buttons = {Input::SETTINGS_MENU, Input::TOGGLE_FPS, Input::TOGGLE_FULLSCREEN, Input::TOGGLE_ZOOM,
 				Input::TAKE_SCREENSHOT, Input::RESET, Input::FAST_FORWARD_A, Input::FAST_FORWARD_B,
-				Input::PAGE_UP, Input::PAGE_DOWN };
+				Input::PAGE_UP, Input::PAGE_DOWN, };
 			break;
 		case 2:
 			buttons = {	Input::DEBUG_MENU, Input::DEBUG_THROUGH, Input::DEBUG_SAVE, Input::DEBUG_ABORT_EVENT,
 				Input::SHOW_LOG };
 			break;
+		case 3:
+			buttons = { Input::SHOW_CHAT };
 	}
 
 	for (auto b: buttons) {

@@ -130,13 +130,15 @@ struct Game_ConfigVideo {
 	EnumConfigParam<ConfigEnum::GameResolution, 3> game_resolution{ "Resolution", "Game resolution. Changes require a restart.", "Video", "GameResolution", ConfigEnum::GameResolution::Original,
 		Utils::MakeSvArray("Original (Recommended)", "Widescreen (Experimental)", "Ultrawide (Experimental)"),
 		Utils::MakeSvArray("original", "widescreen", "ultrawide"),
-		Utils::MakeSvArray("The default resolution (320x240, 4:3)", "Can cause glitches (416x240, 16:9)", "Can cause glitches (560x240, 21:9)")};
+		Utils::MakeSvArray("The default resolution (320x240, 4:3)", "Can cause glithes (416x240, 16:9)", "Can cause glitches (560x240, 21:9)")};
 
 	// These are never shown and are used to restore the window to the previous position
 	ConfigParam<int> window_x{ "", "", "Video", "WindowX", -1 };
 	ConfigParam<int> window_y{ "", "", "Video", "WindowY", -1 };
 	ConfigParam<int> window_width{ "", "", "Video", "WindowWidth", -1 };
 	ConfigParam<int> window_height{ "", "", "Video", "WindowHeight", -1 };
+
+	void* foreign_window_handle = nullptr;
 
 	void Hide();
 };

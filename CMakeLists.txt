@@ -503,6 +503,13 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/external/TinySHA1.hpp
 )
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+	target_sources(${PROJECT_NAME} PRIVATE
+		src/multiplayer/chat_overlay.h
+		src/multiplayer/chat_overlay.cpp
+	)
+endif()
+
 include(CMakeDependentOption)
 
 # Include directories
@@ -595,6 +602,21 @@ endif()
 set(PLAYER_BUILD_EXECUTABLE ON)
 set(PLAYER_TEST_LIBRARIES ${PROJECT_NAME})
 
+set(PLAYER_SHELL "none" CACHE STRING "Optional UI shell, options: none yno")
+set_property(CACHE PLAYER_SHELL PROPERTY STRINGS none yno)
+
+if(${PLAYER_SHELL} STREQUAL "yno")
+	set(PLAYER_YNO TRUE)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_YNO)
+
+	player_find_package(NAME wxWidgets REQUIRED)
+	target_link_libraries(${PROJECT_NAME} wx::core wx::base)
+elseif(${PLAYER_SHELL} STREQUAL "none")
+	# do nothing
+else()
+	message(FATAL_ERROR "Invalid shell ${PLAYER_SHELL}")
+endif()
+
 if(ANDROID AND PLAYER_GRADLE_BUILD)
 	# Build invoked by Gradle
 	# Ugly: Gradle has no way to branch based on the ABI
@@ -634,7 +656,7 @@ elseif(PLAYER_TARGET_PLATFORM STREQUAL "SDL2")
 		TARGET SDL2::SDL2
 		REQUIRED)
 
-	if(TARGET SDL2::SDL2main)
+	if(TARGET SDL2::SDL2main AND ${PLAYER_SHELL} STREQUAL "none")
 		target_link_libraries(${PROJECT_NAME} SDL2::SDL2main)
 	endif()
 
@@ -1229,6 +1251,8 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set(EXE_NAME ${PROJECT_NAME}_exe)
 		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 			add_executable(${EXE_NAME} "src/platform/emscripten/main.cpp")
+		elseif(PLAYER_YNO)	
+			add_executable(${EXE_NAME} "src/platform/ynoshell/main.cpp")
 		else()
 			add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")
 		endif()
@@ -1237,8 +1261,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 	if(WIN32)
 		# Open console for Debug builds
-		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
-		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
 
 		# Add resources
 		string(REPLACE "." "," RC_VERSION ${PROJECT_VERSION})

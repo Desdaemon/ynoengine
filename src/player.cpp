@@ -31,8 +31,9 @@
 #  include <emscripten.h>
 #endif
 
-#ifndef EMSCRIPTEN
+#ifdef PLAYER_YNO
 #  include <uv.h>
+#  include "multiplayer/chat_overlay.h"
 #endif
 
 #include "async_handler.h"
@@ -140,6 +141,7 @@ namespace Player {
 	int rng_seed = -1;
 	Game_ConfigPlayer player_config;
 	Game_ConfigGame game_config;
+	std::function<void(Game_Config&)> did_parse_config;
 #ifdef EMSCRIPTEN
 	std::string emscripten_game_name;
 #endif
@@ -263,6 +265,9 @@ void Player::MainLoop() {
 		Scene::instance->MainFunction();
 
 		Graphics::GetMessageOverlay().Update();
+#ifdef PLAYER_YNO
+		Graphics::GetChatOverlay().Update();
+#endif
 
 		++num_updates;
 	}
@@ -318,6 +323,11 @@ void Player::UpdateInput() {
 	if (Input::IsSystemTriggered(Input::SHOW_LOG)) {
 		Output::ToggleLog();
 	}
+#ifdef PLAYER_YNO
+	if (Input::IsSystemTriggered(Input::SHOW_CHAT)) {
+		Graphics::GetChatOverlay().SetShowAll();
+	}
+#endif
 	if (Input::IsSystemTriggered(Input::TOGGLE_ZOOM)) {
 		DisplayUi->ToggleZoom();
 	}
@@ -680,6 +690,8 @@ Game_Config Player::ParseCommandLine() {
 		cp.SkipNext();
 	}
 
+	if (Player::did_parse_config)
+		Player::did_parse_config(cfg);
 	return cfg;
 }
 
