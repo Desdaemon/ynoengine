@@ -501,6 +501,11 @@ bool Sdl2Ui::RefreshDisplayMode() {
 			display_width, display_height, Color(0, 0, 0, 255));
 	}
 
+	if (!screen_surface) {
+		int scale = window.scale ? static_cast<int>(ceilf(window.scale)) : 1;
+		screen_surface = Bitmap::Create(scale * display_width, scale * display_height, true, main_surface->pitch());
+	}
+
 	return true;
 }
 
@@ -681,7 +686,11 @@ void Sdl2Ui::UpdateDisplay() {
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
 
-		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear && window.scale > 0.f) {
+		// TODO: Remove the division by 2 to render at actual size
+		screen_surface = Bitmap::Create(viewport.w / 2, viewport.h / 2, true, main_surface->pitch());
+
+		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear &&
+			window.scale > 0.f) {
 			if (sdl_texture_scaled) {
 				SDL_DestroyTexture(sdl_texture_scaled);
 			}
@@ -692,7 +701,18 @@ void Sdl2Ui::UpdateDisplay() {
 			if (!sdl_texture_scaled) {
 				Output::Debug("SDL_CreateTexture failed : {}", SDL_GetError());
 			}
-		}
+		}	
+		if (sdl_texture_screen)
+			SDL_DestroyTexture(sdl_texture_screen);
+		sdl_texture_screen = SDL_CreateTexture(sdl_renderer, texture_format, SDL_TEXTUREACCESS_STREAMING,
+			screen_surface->width(), screen_surface->height());
+		if (!sdl_texture_screen)
+			Output::Warning("failed to create screen texture: {}", SDL_GetError());
+		else
+			Output::Debug("sdl_texture_screen: {}", SDL_GetPixelFormatName(texture_format));
+
+		for (auto& it : Drawable::screen_drawables)
+			it->OnResolutionChange();
 	}
 
 	SDL_RenderClear(sdl_renderer);
@@ -704,9 +724,26 @@ void Sdl2Ui::UpdateDisplay() {
 
 		SDL_SetRenderTarget(sdl_renderer, nullptr);
 		SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
-	} else {
+	}
+	//else if (screen_surface && sdl_texture_screen) {
+
+	//	SDL_SetRenderTarget(sdl_renderer, sdl_texture_scaled);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
+
+	//	SDL_SetRenderTarget(sdl_renderer, nullptr);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
+	//}
+	else {
 		SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
 	}
+
+	if (screen_surface && sdl_texture_screen) {
+		SDL_UpdateTexture(sdl_texture_screen, nullptr, screen_surface->pixels(), screen_surface->pitch());
+		SDL_SetTextureBlendMode(sdl_texture_screen, SDL_BLENDMODE_BLEND);
+		SDL_RenderCopy(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
+	}
+
 	SDL_RenderPresent(sdl_renderer);
 }
 

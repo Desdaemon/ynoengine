@@ -63,9 +63,18 @@ public:
 	YNOConnection connection;
 #ifndef EMSCRIPTEN
 	YNOConnection sessionConn;
-	std::function<void(std::string_view msg, bool syncing)> on_chat_msg;
+	struct PlayerData {
+	public:
+		std::string name;
+		std::string systemName;
+		int rank;
+		bool account;
+		std::string badge;
+	};
+	std::function<void(std::string_view msg, std::string_view sender, std::string_view system, bool syncing)> on_chat_msg;
 	std::function<void(std::string_view system)> on_system_graphic_change;
 	std::string lastmsgid;
+	std::map<std::string/*uuid*/, PlayerData> playerdata;
 #endif
 	bool session_active{ false }; // if true, it will automatically reconnect when disconnected
 	bool session_connected{ false };
