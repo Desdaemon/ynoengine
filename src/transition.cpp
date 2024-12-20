@@ -405,18 +405,19 @@ void Transition::Update() {
 			scene->UpdateGraphics();
 		}
 
+		auto& dst_screen = *DisplayUi->GetScreenSurface();
 		if (!screen1) {
 			// erase -> erase is ingored
 			// any -> erase - screen1 was drawn in init.
 			assert(ToErase() && !FromErase());
 			screen1 =  Bitmap::Create(Player::screen_width, Player::screen_height, false);
-			Graphics::LocalDraw(*screen1, std::numeric_limits<Drawable::Z_t>::min(), GetZ() - 1);
+			Graphics::LocalDraw(*screen1, dst_screen, std::numeric_limits<Drawable::Z_t>::min(), GetZ() - 1);
 		}
 		if (ToErase()) {
 			screen2 = Bitmap::Create(Player::screen_width, Player::screen_height, Color(0, 0, 0, 255));
 		} else {
 			screen2 =  Bitmap::Create(Player::screen_width, Player::screen_height, false);
-			Graphics::LocalDraw(*screen2, std::numeric_limits<Drawable::Z_t>::min(), GetZ() - 1);
+			Graphics::LocalDraw(*screen2, dst_screen, std::numeric_limits<Drawable::Z_t>::min(), GetZ() - 1);
 		}
 	}
 

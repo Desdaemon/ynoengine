@@ -494,9 +494,27 @@ void Game_Multiplayer::InitConnection() {
 			cpr::Response resp = cpr::Get(cpr::Url{endpoint});
 			if (resp.status_code >= 200 && resp.status_code < 300) {
 				json chatmsgs = json::parse(resp.text);
+				//playerdata = std::move(chatmsgs["players"]);
+				for (auto& it : chatmsgs["players"]) {
+					auto& entry = playerdata[(std::string)it["uuid"]];
+					entry.name = it["name"];
+					entry.systemName = it["systemName"];
+					entry.rank = it["rank"];
+					entry.account = it["account"];
+					entry.badge = it["badge"];
+				}
+
 				const auto& messages = chatmsgs["messages"];
 				for (auto it = messages.begin(); it != messages.end(); ++it) {
-					on_chat_msg((std::string)(*it)["contents"], it != std::prev(messages.end()));
+					std::string name = "Unknown Player";
+					std::string system;
+					if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
+						name = player->second.name;
+						system = player->second.systemName;
+					}
+					on_chat_msg(
+						(std::string)(*it)["contents"], name, system,
+						it != std::prev(messages.end()));
 				}
 			}
 		}
@@ -505,8 +523,14 @@ void Game_Multiplayer::InitConnection() {
 	});
 	sessionConn.RegisterHandler<SessionGSay>("gsay", [this](SessionGSay& p) {
 		Output::Debug("{}: {}", p.uuid, p.msg);
+		std::string name = "Unknown Player";
+		std::string system;
+		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
+			name = player->second.name;
+			system = player->second.systemName;
+		}
 		if (on_chat_msg) {
-			on_chat_msg(p.msg, false);
+			on_chat_msg(p.msg, name, system, false);
 		}
 	});
 #endif

@@ -1262,6 +1262,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 	if(WIN32)
 		# Open console for Debug builds
 		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 
 		# Add resources
 		string(REPLACE "." "," RC_VERSION ${PROJECT_VERSION})

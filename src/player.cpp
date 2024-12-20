@@ -402,8 +402,9 @@ void Player::Update(bool update_scene) {
 
 void Player::Draw() {
 	Graphics::Update();
-	Graphics::Draw(*DisplayUi->GetDisplaySurface());
+	Graphics::Draw(*DisplayUi);
 	DisplayUi->UpdateDisplay();
+	DisplayUi->GetScreenSurface()->Clear();
 }
 
 void Player::IncFrame() {
