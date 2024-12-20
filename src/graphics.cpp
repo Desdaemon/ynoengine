@@ -112,28 +112,37 @@ void Graphics::UpdateTitle() {
 #endif
 }
 
-void Graphics::Draw(Bitmap& dst) {
+void Graphics::Draw(BaseUi& ui) {
 	auto& transition = Transition::instance();
 
 	auto min_z = std::numeric_limits<Drawable::Z_t>::min();
 	auto constexpr max_z = std::numeric_limits<Drawable::Z_t>::max();
+	auto& dst = *ui.GetDisplaySurface();
+	auto& dst_screen = *ui.GetScreenSurface();
 	if (transition.IsActive()) {
 		min_z = transition.GetZ();
 	} else if (transition.IsErasedNotActive()) {
 		min_z = transition.GetZ() + 1;
 		dst.Clear();
+		dst_screen.Clear();
 	}
-	LocalDraw(dst, min_z, max_z);
+	LocalDraw(dst, dst_screen, min_z, max_z);
 }
 
-void Graphics::LocalDraw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z) {
+void Graphics::LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z) {
 	auto& drawable_list = DrawableMgr::GetLocalList();
 
 	if (!drawable_list.empty() && min_z == std::numeric_limits<Drawable::Z_t>::min()) {
 		current_scene->DrawBackground(dst);
 	}
 
-	drawable_list.Draw(dst, min_z, max_z);
+	drawable_list.Draw(dst, dst_screen, min_z, max_z);
+}
+
+void Graphics::OnResolutionChange() {
+#ifdef PLAYER_YNO
+	Graphics::GetChatOverlay().OnResolutionChange();
+#endif
 }
 
 std::shared_ptr<Scene> Graphics::UpdateSceneCallback() {

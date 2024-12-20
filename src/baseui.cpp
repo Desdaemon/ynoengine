@@ -66,6 +66,7 @@ BitmapRef BaseUi::CaptureScreen() {
 
 void BaseUi::CleanDisplay() {
 	main_surface->Clear();
+	screen_surface->Clear();
 }
 
 void BaseUi::SetGameResolution(ConfigEnum::GameResolution resolution) {

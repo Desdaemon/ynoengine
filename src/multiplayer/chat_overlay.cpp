@@ -23,19 +23,24 @@
 #include "game_message.h"
 #include "output.h"
 #include "input_buttons.h"
+#include "cache.h"
 
-ChatOverlay::ChatOverlay() : Drawable(Priority_Overlay, Drawable::Flags::Global)
+ChatOverlay::ChatOverlay() : Drawable(Priority_Overlay, Drawable::Flags::Global | Drawable::Flags::Screenspace)
 {
 
 }
 
 void ChatOverlay::Draw(Bitmap& dst) {
-	dst.Blit(ox, oy, *bitmap, bitmap->GetRect(), 255);
-	if (!dirty) return;
+	if (!IsAnyMessageVisible() && !show_all) return;
+
+	if (!dirty) {
+		dst.Blit(ox, oy, *bitmap, bitmap->GetRect(), 255);
+		return;
+	}
 
 	bitmap->Clear();
 
-	constexpr int y_end = 240;
+	int y_end = DisplayUi->GetScreenSurfaceRect().height;
 	
 
 	int i = 0;
@@ -45,9 +50,14 @@ void ChatOverlay::Draw(Bitmap& dst) {
 
 	bool unlocked_start = scroll < half_screen;
 	bool unlocked_end = scroll > messages.size() - half_screen;
-	int last_sticky = (int)messages.size() - half_screen * 2;
+	int last_sticky = std::max(0, (int)messages.size() - half_screen * 2);
 	// we want half a screen before first sticky and half a screen after the last sticky.
 	int viewport = std::clamp(scroll - half_screen, 0, std::min(scroll + half_screen, last_sticky));
+
+	std::vector<std::string> lines;
+	int lidx = 0;
+	const auto& system = *Cache::SystemOrBlack();
+	constexpr Color offwhite = Color(200, 200, 200, 255);
 
 	for (auto message = messages.rbegin() + viewport; message != messages.rend(); ++message) {
 		if (!message->hidden || show_all) {
@@ -56,30 +66,55 @@ void ChatOverlay::Draw(Bitmap& dst) {
 				unlocked_end ? (last_sticky + i == scroll ? grey : black) :
 				i == half_screen ? grey : black;
 
-			bitmap->Blit(0, y_end - (i + 1) * text_height, *bg, bg->GetRect(), 128);
-			constexpr Color white = Color(255, 255, 255, 255);
-			Text::Draw(*bitmap, 2, y_end - (i + 1) * text_height, *Font::NameText(), white, message->text);
+			// figure out how many lines we need to print
+			std::string temp = fmt::format("[{}] {}", message->sender, message->text);
+			bool first = true;
+			Game_Message::WordWrap(
+				temp,
+				bitmap->width(),
+				[&](StringView line) {
+					if (first) {
+						first = false;
+						lines.emplace_back(line.substr(1 + message->sender.size() + 2));
+					} else
+						lines.emplace_back(line);
+				}, *Font::NameText());
+			for (auto line = lines.rbegin(); line != lines.rend(); ++line) {
+				// semitransparent bg
+				int y = y_end - (lidx + 1) * text_height;
+				bitmap->Blit(0, y, *bg, bg->GetRect(), 200);
+
+				int offset = 2;
+				if (std::next(line) == lines.rend()) {
+					// draw the username
+					offset += Text::Draw(*bitmap, offset, y, *Font::NameText(), offwhite, "[").x;
+					offset += Text::Draw(*bitmap, offset, y, *Font::NameText(), *message->system, 0, message->sender).x;
+					offset += Text::Draw(*bitmap, offset, y, *Font::NameText(), offwhite, "] ").x;
+				}
+				Text::Draw(*bitmap, offset, y, *Font::NameText(), offwhite, *line);
+				++lidx;
+				if (lidx * text_height > y_end) break;
+			}
 			++i;
+			lines.clear();
 		}
 		if (!show_all && i > message_max_minimized) break;
-		if (i * text_height > y_end) break;
+		if (lidx * text_height > y_end) break;
 	}
 
+	dst.Blit(ox, oy, *bitmap, bitmap->GetRect(), 255);
 	dirty = false;
 }
 
-void ChatOverlay::AddMessage(const std::string& message) {
+void ChatOverlay::AddMessage(std::string_view message, std::string_view sender, std::string_view system) {
 	if (message.empty()) {
 		return;
 	}
+	counter = 0;
 
-	Game_Message::WordWrap(
-		message,
-		Player::screen_width,
-		[&](StringView line) {
-			messages.emplace_back(std::string(line));
-		}, *Font::NameText()
-	);
+	auto sysref = system.empty() ? Cache::SystemOrBlack() : Cache::System(system.data());
+
+	messages.emplace_back(std::string(message), std::string(sender), sysref);
 
 	while (messages.size() > message_max) {
 		messages.pop_front();
@@ -99,41 +134,38 @@ void ChatOverlay::Update() {
 
 
 	if (show_all) {
+		static int delta;
 		if (Input::IsTriggered(Input::InputButton::SCROLL_DOWN) ||
-			Input::IsTriggered(Input::InputButton::DOWN) ||
-			Input::IsRepeated(Input::InputButton::DOWN)) {
+			Input::IsTriggered(Input::InputButton::PAGE_DOWN)) {
+			delta = 5;
 			DoScroll(-1);
 		}
+		else if (Input::IsRepeated(Input::InputButton::PAGE_DOWN)) {
+			DoScroll(std::clamp(--delta / 5, -4, -1));
+		}
 		if (Input::IsTriggered(Input::InputButton::SCROLL_UP) ||
-			Input::IsTriggered(Input::InputButton::UP) ||
-			Input::IsRepeated(Input::InputButton::UP)) {
+			Input::IsTriggered(Input::InputButton::PAGE_UP)) {
+			delta = -5;
 			DoScroll(1);
 		}
-		if (Input::IsTriggered(Input::InputButton::PAGE_DOWN)) {
-			scroll = 0;
-			dirty = true;
-		}
-		if (Input::IsTriggered(Input::InputButton::PAGE_UP)) {
-			scroll = messages.size() - 1;
-			dirty = true;
+		else if (Input::IsRepeated(Input::InputButton::PAGE_UP)) {
+			DoScroll(std::clamp(++delta / 5, 1, 4));
 		}
 	}
 
 
-	if (++counter > 150) {
-		counter = 0;
-		for (auto& message : messages) {
-			if (!message.hidden) {
+	if (IsAnyMessageVisible()) {
+		if (++counter > 450) {
+			counter = 0;
+			for (auto& message : messages) {
 				message.hidden = true;
-				break;
 			}
+			dirty = true;
 		}
-		dirty = true;
 	}
 }
 
 void ChatOverlay::SetShowAll(bool show_all) {
-	Output::Warning("SetShowAll");
 	this->show_all = show_all;
 	dirty = true;
 }
@@ -150,10 +182,15 @@ void ChatOverlay::OnResolutionChange() {
 	}
 
 	int text_height = 12; // Font::NameText()->vGetSize('T').height;
-	black = Bitmap::Create(Player::screen_width, text_height, Color(0, 0, 0, 255));
-	grey = Bitmap::Create(Player::screen_width, text_height, Color(100, 100, 100, 255));
-	bitmap = Bitmap::Create(Player::screen_width, text_height * message_max, true);
+	Rect rect = DisplayUi->GetScreenSurfaceRect();
+	int width = rect.width;
+	black = Bitmap::Create(width, text_height, Color(0, 0, 0, 255));
+	grey = Bitmap::Create(width, text_height, Color(100, 100, 100, 255));
+	bitmap = Bitmap::Create(width, text_height * message_max, true);
+	dirty = true;
 }
 
-ChatOverlayMessage::ChatOverlayMessage(std::string text) :
-	text(std::move(text)) {}
+bool ChatOverlay::IsAnyMessageVisible() const {
+	return std::any_of(messages.cbegin(), messages.cend(), [](const ChatOverlayMessage& m) { return !m.hidden; });
+}
+

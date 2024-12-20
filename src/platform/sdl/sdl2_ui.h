@@ -130,6 +130,7 @@ private:
 	/** Main SDL window. */
 	SDL_Texture* sdl_texture_game = nullptr;
 	SDL_Texture* sdl_texture_scaled = nullptr;
+	SDL_Texture* sdl_texture_screen = nullptr;
 	SDL_Window* sdl_window = nullptr;
 	SDL_Renderer* sdl_renderer = nullptr;
 	SDL_Joystick *sdl_joystick = nullptr;

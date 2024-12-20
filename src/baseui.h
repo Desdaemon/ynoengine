@@ -32,6 +32,8 @@
 #include "game_config.h"
 #include "game_clock.h"
 #include "input.h"
+#include "bitmap.h"
+#include "drawable.h"
 
 #ifdef SUPPORT_AUDIO
 struct AudioInterface;
@@ -132,6 +134,8 @@ public:
 	/** @return dimensions of the window */
 	virtual Rect GetWindowMetrics() const;
 
+	Rect GetScreenSurfaceRect() const;
+
 	/**
 	 * Gets client width size.
 	 *
@@ -169,7 +173,9 @@ public:
 	std::array<Input::TouchInput, 5>& GetTouchInput();
 
 	BitmapRef const& GetDisplaySurface() const;
+	BitmapRef const& GetScreenSurface() const;
 	BitmapRef& GetDisplaySurface();
+	BitmapRef& GetScreenSurface();
 
 	/**
 	 * Requests a resolution change of the framebuffer.
@@ -293,6 +299,9 @@ protected:
 	/** Surface used for zoom. */
 	BitmapRef main_surface;
 
+	/** Screen-sized surface. */
+	BitmapRef screen_surface = nullptr;
+
 	/** Mouse position on screen relative to the window. */
 	Point mouse_pos;
 
@@ -331,6 +340,10 @@ inline Rect BaseUi::GetWindowMetrics() const {
 	return {-1, -1, -1, -1};
 }
 
+inline Rect BaseUi::GetScreenSurfaceRect() const {
+	return GetScreenSurface()->GetRect();
+}
+
 inline bool BaseUi::IsFrameRateSynchronized() const {
 	return external_frame_rate;
 }
@@ -357,6 +370,14 @@ inline BitmapRef const& BaseUi::GetDisplaySurface() const {
 
 inline BitmapRef& BaseUi::GetDisplaySurface() {
 	return main_surface;
+}
+
+inline BitmapRef const& BaseUi::GetScreenSurface() const {
+	return screen_surface ? screen_surface : main_surface;
+}
+
+inline BitmapRef& BaseUi::GetScreenSurface() {
+	return screen_surface ? screen_surface : main_surface;
 }
 
 inline bool BaseUi::vChangeDisplaySurfaceResolution(int new_width, int new_height) {
