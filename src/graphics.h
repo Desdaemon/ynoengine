@@ -24,6 +24,7 @@
 #include "drawable.h"
 #include "drawable_list.h"
 #include "game_clock.h"
+#include "baseui.h"
 
 class MessageOverlay;
 class Scene;
@@ -51,9 +52,12 @@ namespace Graphics {
 	 */
 	void Update();
 
-	void Draw(Bitmap& dst);
+	void Draw(BaseUi& ui);
 
-	void LocalDraw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z);
+	void LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z);
+
+	/** Screenspace drawables can put their resolution handlers here. Called after DisplayUi is done updating the surfaces. */
+	void OnResolutionChange();
 
 	std::shared_ptr<Scene> UpdateSceneCallback();
 

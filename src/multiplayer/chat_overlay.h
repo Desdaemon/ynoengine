@@ -28,8 +28,10 @@
 //using ChatOverlayMessage = std::string;
 class ChatOverlayMessage {
 public:
-	ChatOverlayMessage(std::string text);
+	ChatOverlayMessage(std::string text, std::string sender, BitmapRef system);
 	std::string text;
+	std::string sender;
+	BitmapRef system;
 	bool hidden = false;
 };
 
@@ -38,13 +40,15 @@ public:
 	ChatOverlay();
 	void Draw(Bitmap& dst) override;
 	void Update();
-	void AddMessage(const std::string& msg);
-	void OnResolutionChange();
+	void AddMessage(std::string_view msg, std::string_view sender, std::string_view system = "");
+	void OnResolutionChange() override;
 	void SetShowAll(bool show_all);
 	inline void SetShowAll() { SetShowAll(!show_all); }
 	inline bool ShowingAll() const noexcept { return show_all;  }
 	void DoScroll(int increase);
 private:
+	bool IsAnyMessageVisible() const;
+
 	bool dirty = false;
 	bool show_all = false;
 	int ox = 0;
@@ -59,5 +63,11 @@ private:
 
 	std::deque<ChatOverlayMessage> messages;
 };
+
+
+inline ChatOverlayMessage::ChatOverlayMessage(std::string text, std::string sender, BitmapRef system) :
+	text(std::move(text)), sender(std::move(sender)), system(system)
+{
+}
 
 #endif

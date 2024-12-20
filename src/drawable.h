@@ -20,6 +20,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
+#include <lcf/span.h>
 
 class Bitmap;
 class Drawable;
@@ -44,6 +46,8 @@ public:
 		Shared = 2,
 		/** This flag indicates the drawable should not be drawn */
 		Invisible = 4,
+		/** Draws directly on the screen. OnResolutionChange should also be implemented to handle screen resolution changes. */
+		Screenspace = 8,
 		/** The default flag set */
 		Default = None
 	};
@@ -69,6 +73,10 @@ public:
 
 	/** @return true if the drawable is currently visible */
 	bool IsVisible() const;
+
+	bool IsScreenspace() const noexcept;
+
+	virtual void OnResolutionChange() {}
 
 	/**
 	 * Set if the drawable should be visible
@@ -113,6 +121,9 @@ public:
 	 * @return Priority or 0 when not found
 	 */
 	static Z_t GetPriorityForBattleLayer(int which);
+
+	static std::vector<Drawable*> screen_drawables;
+	static void RemoveScreenDrawable(lcf::Span<Drawable*> container);
 private:
 	Z_t _z = 0;
 	Flags _flags = Flags::Default;
@@ -136,11 +147,6 @@ inline Drawable::Flags operator~(Drawable::Flags f) {
 	return static_cast<Drawable::Flags>(~static_cast<unsigned>(f));
 }
 
-inline Drawable::Drawable(Z_t z, Flags flags)
-	: _z(z),
-	_flags(flags)
-{
-}
 
 inline Drawable::Z_t Drawable::GetZ() const {
 	return _z;
@@ -156,6 +162,10 @@ inline bool Drawable::IsShared() const {
 
 inline bool Drawable::IsVisible() const {
 	return !static_cast<bool>(_flags & Flags::Invisible);
+}
+
+inline bool Drawable::IsScreenspace() const noexcept {
+	return static_cast<bool>(_flags & Flags::Screenspace);
 }
 
 inline void Drawable::SetVisible(bool value) {
