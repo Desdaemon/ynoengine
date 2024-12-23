@@ -160,6 +160,14 @@ public:
 	 */
 	void SetGraphicFile(bool graphic);
 
+	/** Denotes that this file is meant to download into a folder outside the game. */
+	void SetParentScope(bool parent_scope);
+
+	/** Sets the extension of the file used when downloading only. */
+	void SetRequestExtension(std::string_view ext);
+
+	const std::string_view GetRequestExtension() const noexcept;
+
 	/**
 	 * Starts the async requests.
 	 * When the request was already started earlier and is pending this call
@@ -222,6 +230,8 @@ private:
 	int state = State_DoneFailure;
 	bool important = false;
 	bool graphic = false;
+	bool parent_scope = false;
+	std::string request_ext = "";
 };
 
 /**
@@ -254,6 +264,18 @@ inline bool FileRequestAsync::IsImportantFile() const {
 
 inline void FileRequestAsync::SetImportantFile(bool important) {
 	this->important = important;
+}
+
+inline void FileRequestAsync::SetParentScope(bool parent_scope) {
+	this->parent_scope = parent_scope;
+}
+
+inline void FileRequestAsync::SetRequestExtension(std::string_view ext) {
+	request_ext = ext;
+}
+
+inline const std::string_view FileRequestAsync::GetRequestExtension() const noexcept {
+	return request_ext;
 }
 
 inline bool FileRequestAsync::IsGraphicFile() const {

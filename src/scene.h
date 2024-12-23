@@ -59,6 +59,8 @@ public:
 		GameBrowser,
 		Teleport,
 		Settings,
+		// Online play only
+		ChatOverlay,
 		SceneMax
 	};
 

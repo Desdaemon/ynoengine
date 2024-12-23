@@ -61,7 +61,7 @@ public:
 	} settings;
 
 	YNOConnection connection;
-#ifndef EMSCRIPTEN
+#ifdef PLAYER_YNO
 	YNOConnection sessionConn;
 	struct PlayerData {
 	public:
@@ -71,7 +71,15 @@ public:
 		bool account;
 		std::string badge;
 	};
-	std::function<void(std::string_view msg, std::string_view sender, std::string_view system, bool syncing)> on_chat_msg;
+	struct ChatMsg {
+	public:
+		std::string_view content;
+		std::string_view sender;
+		std::string_view system;
+		std::string_view badge;
+		bool syncing = false;
+	};
+	std::function<void(ChatMsg)> on_chat_msg;
 	std::function<void(std::string_view system)> on_system_graphic_change;
 	std::string lastmsgid;
 	std::map<std::string/*uuid*/, PlayerData> playerdata;
