@@ -33,6 +33,10 @@
 #include "output.h"
 #include "feature.h"
 
+#ifdef PLAYER_YNO
+#  include "multiplayer/chat_overlay.h"
+#endif
+
 #include <cctype>
 
 static Window_Message* window = nullptr;
@@ -81,11 +85,11 @@ int Game_Message::GetRealPosition() {
 	}
 }
 
-int Game_Message::WordWrap(std::string_view line, const int limit, const WordWrapCallback& callback) {
+int Game_Message::WordWrap(StringView line, const int limit, const Game_Message::WordWrapCallback& callback) {
 	return WordWrap(line, limit, callback, *Font::Default());
 }
 
-int Game_Message::WordWrap(std::string_view line, const int limit, const WordWrapCallback& callback, const Font& font) {
+int Game_Message::WordWrap(StringView line, const int limit, const Game_Message::WordWrapCallback& callback, const Font& font) {
 	int start = 0;
 	int line_count = 0;
 
@@ -121,6 +125,78 @@ int Game_Message::WordWrap(std::string_view line, const int limit, const WordWra
 
 		start = next;
 	} while (start < static_cast<int>(line.size()));
+
+	return line_count;
+}
+
+int Game_Message::WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const typename Game_Message::ComponentWrapCallback& callback, const Font& font) {
+	int line_count = 0;
+	int line_width = 0;
+
+	std::vector<std::shared_ptr<ChatComponent>> line_spans;
+	auto flush = [&] {
+		if (line_spans.empty()) return;
+		callback({ line_spans.data(), line_spans.size() });
+		line_count++;
+		line_width = 0;
+		line_spans.clear();
+	};
+	for (auto span = spans.begin(); span != spans.end(); ++span) {
+		if (auto fragment = span->get()->Downcast<ChatComponents::String>()) {
+			auto& line = fragment->string;
+
+			int start = 0;
+			do {
+				int next = start;
+				int last_width = 0;
+				bool must_break = false;
+				do {
+					int found = line.find(' ', next);
+					if (found == std::string::npos)
+						found = line.size();
+
+					auto wrapped = line.substr(start, found - start);
+					auto width = Text::GetSize(font, wrapped).width;
+					if (line_width + width > limit) {
+						must_break = true;
+						if (next == start) {
+							next = found + 1;
+						}
+						break;
+					}
+					last_width = width;
+					next = found + 1;
+				} while (next < line.size());
+
+				line_width += last_width;
+				if (last_width == 0 || must_break) {
+					flush();
+				}
+
+				if (start == next - 1) {
+					start = next;
+					continue;
+				}
+
+				auto wrapped = line.substr(start, (next - 1) - start);
+				line_spans.emplace_back(std::make_shared<ChatString>(wrapped));
+				if (must_break)
+					flush();
+
+				start = next;
+			} while (start < line.size());
+		}
+		else if (auto box = span->get()->Downcast<ChatComponents::Box>()) {
+			int width = box->x;
+			if (line_width + width > limit) {
+				// next line por favor
+				flush();
+			}
+			line_spans.emplace_back(*span);
+			line_width += width;
+		}
+	}
+	flush();
 
 	return line_count;
 }

@@ -375,7 +375,7 @@ namespace S2C {
 		int temperature;
 		int precipitation;
 	};
-#ifndef EMSCRIPTEN
+#ifdef PLAYER_YNO
 	class SessionGSay : public S2CPacket {
 	public:
 		SessionGSay(const PL& v)
@@ -383,8 +383,8 @@ namespace S2C {
 			mapid(v.at(1)),
 			prevmapid(v.at(2)),
 			prevlocsstr(v.at(3)),
-			x(stoi((std::string)v.at(4))),
-			y(stoi((std::string)v.at(5))),
+			x(Decode<int>(v.at(4))),
+			y(Decode<int>(v.at(5))),
 			msg(v.at(6)),
 			msgid(v.at(7)) {}
 		int x, y;
@@ -394,6 +394,32 @@ namespace S2C {
 		std::string prevlocsstr;
 		std::string msg;
 		std::string msgid;
+	};
+	class SessionSay : public S2CPacket {
+	public:
+		SessionSay(const PL& v)
+			: uuid(v.at(0)),
+			msg(v.at(1)) {}
+		std::string uuid;
+		std::string msg;
+	};
+	class SessionPlayerInfo : public S2CPacket {
+	public:
+		SessionPlayerInfo(const PL& v) :
+			uuid(v.at(0)),
+			name(v.at(1)),
+			systemName(v.at(2)),
+			rank(Decode<int>(v.at(3))),
+			account(Decode<bool>(v.at(4))),
+			badge(v.at(5))
+		{}
+		int rank;
+		bool account;
+		std::string uuid;
+		std::string name;
+		std::string systemName;
+		std::string badge;
+		// TODO: Medals?
 	};
 #endif
 }

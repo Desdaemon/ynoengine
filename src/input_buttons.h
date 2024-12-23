@@ -86,6 +86,8 @@ namespace Input {
 		TOGGLE_FULLSCREEN,
 		TOGGLE_ZOOM,
 		SHOW_CHAT,
+		CHAT_SCROLL_DOWN,
+		CHAT_SCROLL_UP,
 		BUTTON_COUNT
 	};
 
@@ -132,7 +134,9 @@ namespace Input {
 		"FAST_FORWARD_B",
 		"TOGGLE_FULLSCREEN",
 		"TOGGLE_ZOOM",
-		"SHOW_CHAT",
+		"SHOW_CHAT",	
+		"CHAT_SCROLL_DOWN",
+		"CHAT_SCROLL_UP",
 		"BUTTON_COUNT");
 
 	constexpr auto kInputButtonHelp = lcf::makeEnumTags<InputButton>(
@@ -179,6 +183,8 @@ namespace Input {
 		"Toggle Fullscreen mode",
 		"Toggle Window Zoom level",
 		"Toggle chat display",
+		"Scroll chat window down",
+		"Scroll chat window up",
 		"Total Button Count");
 
 	/**

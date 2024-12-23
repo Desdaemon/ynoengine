@@ -173,11 +173,15 @@ std::string FileFinder::MakeCanonical(std::string_view path, int initial_deepnes
 		if (path_comp == "..") {
 			if (path_can.size() > 0) {
 				path_can.pop_back();
-			} else if (initial_deepness > 0) {
+			}
+			else if (initial_deepness > 0) {
 				// Ignore, we are in root
 				--initial_deepness;
+			} else if (initial_deepness == 0) {
+				// not -1, intented to go outside the game folder
+				path_can.push_back(path_comp);
 			} else {
-				Output::Debug("Path traversal out of game directory: {}", path);
+				Output::Warning("Path traversal out of game directory");
 			}
 		} else if (path_comp.empty() || path_comp == ".") {
 			// ignore
@@ -487,8 +491,9 @@ Filesystem_Stream::InputStream open_generic_with_fallback(std::string_view dir, 
 	return is;
 }
 
-Filesystem_Stream::InputStream FileFinder::OpenImage(std::string_view dir, std::string_view name) {
-	DirectoryTree::Args args = { MakePath(dir, name), IMG_TYPES, 1, false };
+Filesystem_Stream::InputStream FileFinder::OpenImage(StringView dir, StringView name) {
+	int initial_depth = dir.starts_with("../") ? 0 : 1;
+	DirectoryTree::Args args = { MakePath(dir, name), IMG_TYPES, initial_depth, false };
 	return open_generic(dir, name, args);
 }
 

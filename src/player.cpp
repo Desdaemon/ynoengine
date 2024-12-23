@@ -1133,6 +1133,11 @@ void Player::LoadFonts() {
 	if (name_text) {
 		Font::SetNameText(Font::CreateFtFont(std::move(name_text), 11, false, false), false);
 	}
+	
+	auto chat_text = FileFinder::OpenFont("ChatText");
+	if (chat_text) {
+		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 36, false, false));
+	}
 
 	auto name_text_2 = FileFinder::OpenFont("NameText2");
 	if (name_text_2) {
