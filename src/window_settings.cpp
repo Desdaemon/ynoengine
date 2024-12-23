@@ -649,7 +649,7 @@ void Window_Settings::RefreshButtonList() {
 				Input::SHOW_LOG };
 			break;
 		case 3:
-			buttons = { Input::SHOW_CHAT };
+			buttons = { Input::SHOW_CHAT, Input::CHAT_SCROLL_UP, Input::CHAT_SCROLL_DOWN };
 	}
 
 	for (auto b: buttons) {

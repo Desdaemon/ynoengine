@@ -687,7 +687,7 @@ void Sdl2Ui::UpdateDisplay() {
 		}
 
 		// TODO: Remove the division by 2 to render at actual size
-		screen_surface = Bitmap::Create(viewport.w / 2, viewport.h / 2, true, main_surface->pitch());
+		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
 
 		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear &&
 			window.scale > 0.f) {

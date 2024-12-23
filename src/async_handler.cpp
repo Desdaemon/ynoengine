@@ -25,6 +25,11 @@
 #  include <lcf/reader_util.h>
 #  include <nlohmann/json.hpp>
    using json = nlohmann::json;
+#elif defined(PLAYER_YNO)
+#  include <lcf/reader_util.h>
+#  include <cpr/cpr.h>
+#  include <uv.h>
+#  define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
 #endif
 
 #include "async_handler.h"
@@ -46,9 +51,7 @@ namespace {
 	std::unordered_map<std::string, std::shared_ptr<FileRequestAsync>> async_requests;
 	std::unordered_map<std::string, std::string> file_mapping;
 	int next_id = 0;
-#ifdef EMSCRIPTEN
 	int index_version = 1;
-#endif
 
 	FileRequestAsync* GetRequest(const std::string& path) {
 		auto it = async_requests.find(path);
@@ -72,20 +75,27 @@ namespace {
 		return std::make_shared<int>(next_id++);
 	}
 
-#ifdef EMSCRIPTEN
 	constexpr size_t ASYNC_MAX_RETRY_COUNT{ 16 };
 
 	struct async_download_context {
 		std::string url, file, param;
 		std::weak_ptr<FileRequestAsync> obj;
 		size_t count;
+#ifndef EMSCRIPTEN
+		uv_work_t uvctx;
+		int http_status = 500;
+#endif
 
 		async_download_context(
 			std::string u,
 			std::string f,
 			std::string p,
 			FileRequestAsync* o
-		) : url{ std::move(u) }, file{ std::move(f) }, param{ std::move(p) }, obj{ o->weak_from_this() }, count{} {}
+		) : url{ std::move(u) }, file{ std::move(f) }, param{ std::move(p) }, obj{ o->weak_from_this() }, count{}
+#ifndef EMSCRIPTEN
+			, uvctx{}
+#endif
+		{}
 	};
 
 	void download_success_retry(unsigned, void* userData, const char*) {
@@ -110,7 +120,7 @@ namespace {
 			if (flag1)
 				Output::Warning("DL Failure: max retries exceeded: {}", download_path);
 			else if (flag2)
-				Output::Warning("DL Failure: file not available: {}", download_path);
+				Output::Warning("DL Failure: file not available: {} ({})", download_path, status);
 
 			if (sobj)
 				sobj->DownloadDone(false);
@@ -121,7 +131,9 @@ namespace {
 		start_async_wget_with_retry(ctx);
 	}
 
+
 	void start_async_wget_with_retry(async_download_context* ctx) {
+#ifdef EMSCRIPTEN
 		emscripten_async_wget2(
 			ctx->url.data(),
 			ctx->file.data(),
@@ -132,8 +144,39 @@ namespace {
 			download_failure_retry,
 			nullptr
 		);
-	}
+#else
+		uv_queue_work(uv_default_loop(), &ctx->uvctx,
+		[](uv_work_t *task) {
+			auto ctx = EP_CONTAINER_OF(task, async_download_context, uvctx);
+			auto sobj = ctx->obj.lock();
+			if (sobj) {
+				std::string url_(ctx->url);
+				std::string path_(sobj->GetPath());
+				if (!sobj->GetRequestExtension().empty()) {
+					url_ += sobj->GetRequestExtension();
+					path_ += sobj->GetRequestExtension();
+				}
 
+				std::ofstream out(path_, std::ios::binary);
+
+				auto resp = cpr::Download(out, cpr::Url{url_});
+				out.close();
+				ctx->http_status = resp.status_code;
+			}
+		},
+		[](uv_work_t *task, int status) {
+			auto ctx = EP_CONTAINER_OF(task, async_download_context, uvctx);
+			if (status) {
+				Output::Debug("Task cancelled ({})", status);
+				return download_failure_retry(0, ctx, 500);
+			}
+			if (ctx->http_status >= 200 && ctx->http_status < 300)
+				download_success_retry(0, ctx, "");
+			else
+				download_failure_retry(0, ctx, ctx->http_status);
+		});
+#endif
+	}
 	void async_wget_with_retry(
 		std::string url,
 		std::string file,
@@ -144,8 +187,6 @@ namespace {
 		auto ctx = new async_download_context{ url, file, param, obj };
 		start_async_wget_with_retry(ctx);
 	}
-
-#endif
 }
 
 void AsyncHandler::CreateRequestMapping(const std::string& file) {
@@ -305,7 +346,8 @@ FileRequestAsync::FileRequestAsync(std::string path, std::string directory, std:
 	file(std::move(file)),
 	path(std::move(path)),
 	state(State_WaitForStart)
-{ }
+{
+}
 
 void FileRequestAsync::SetGraphicFile(bool graphic) {
 	this->graphic = graphic;
@@ -336,19 +378,31 @@ void FileRequestAsync::Start() {
 
 	state = State_Pending;
 
-#ifdef EMSCRIPTEN
+#if defined(EMSCRIPTEN) || defined(PLAYER_YNO)
 	std::string request_path;
 #  ifdef EM_GAME_URL
 	request_path = EM_GAME_URL;
 #  else
-	request_path = "games/";
+	if (parent_scope)
+		request_path = "https://ynoproject.net/";
+	else
+		request_path = "https://ynoproject.net/data/";
 #  endif
 
-	if (!Player::emscripten_game_name.empty()) {
-		request_path += Player::emscripten_game_name + "/";
-	} else {
-		request_path += "default/";
+#ifndef EMSCRIPTEN
+	// TODO correct this
+	if (!parent_scope) {
+		DownloadDone(true);
+		return;
 	}
+#endif
+
+	//if (!Player::emscripten_game_name.empty()) {
+	//	request_path += Player::emscripten_game_name + "/";
+	//} else {
+		// TODO: get the current game
+		request_path += "2kki/";
+	//}
 
 	std::string modified_path;
 	if (index_version >= 2) {
@@ -374,13 +428,18 @@ void FileRequestAsync::Start() {
 		}
 	}
 
+
 	auto it = file_mapping.find(modified_path);
 	if (it != file_mapping.end()) {
 		request_path += it->second;
 	} else {
 		if (file_mapping.empty()) {
 			// index.json not fetched yet, fallthrough and fetch
-			request_path += path;
+			std::string path_(this->path);
+			size_t offset;
+			if (parent_scope && (offset = path_.find("../")) != std::string::npos)
+				path_ = path_.substr(offset + 3);
+			request_path += path_;
 		} else {
 			// Fire immediately (error)
 			Output::Debug("{} not in index.json", modified_path);
@@ -394,7 +453,7 @@ void FileRequestAsync::Start() {
 	request_path = Utils::ReplaceAll(request_path, "#", "%23");
 	request_path = Utils::ReplaceAll(request_path, "+", "%2B");
 
-	auto request_file = (it != file_mapping.end() ? it->second : path);
+	std::string request_file = (it != file_mapping.end() ? it->second : path);
 	async_wget_with_retry(request_path, std::move(request_file), "", this);
 #else
 #  ifdef EM_GAME_URL

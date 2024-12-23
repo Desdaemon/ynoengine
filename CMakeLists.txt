@@ -507,6 +507,8 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 	target_sources(${PROJECT_NAME} PRIVATE
 		src/multiplayer/chat_overlay.h
 		src/multiplayer/chat_overlay.cpp
+		src/multiplayer/scene_overlay.h
+		src/multiplayer/scene_overlay.cpp
 	)
 endif()
 

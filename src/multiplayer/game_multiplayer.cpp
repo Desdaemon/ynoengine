@@ -70,7 +70,7 @@ void Game_Multiplayer::SpawnOtherPlayer(int id) {
 
 	auto scene_map = Scene::Find(Scene::SceneType::Map);
 	if (!scene_map) {
-		Output::Error("unexpected, {}:{}", __FILE__, __LINE__);
+		Output::Debug("unexpected, {}:{}", __FILE__, __LINE__);
 		return;
 	}
 	auto old_list = &DrawableMgr::GetLocalList();
@@ -162,6 +162,12 @@ void Game_Multiplayer::InitConnection() {
 		session_connected = true;
 		SendBasicData();
 		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals);
+#ifdef PLAYER_YNO
+		auto& player = playerdata[p.uuid];
+		player.rank = p.rank;
+		player.badge = p.badge;
+		player.account = p.account_bin == 1;
+#endif
 	});
 	connection.RegisterHandler<RoomInfoPacket>("ri", [this] (RoomInfoPacket& p) {
 		if (p.room_id != room_id) {
@@ -242,6 +248,12 @@ void Game_Multiplayer::InitConnection() {
 		UpdateNBPlayers();
 
 		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals, p.id);
+#ifdef PLAYER_YNO
+		auto& player = playerdata[p.uuid];
+		player.rank = p.rank;
+		player.badge = p.badge;
+		player.account = p.account_bin == 1;
+#endif
 	});
 	connection.RegisterHandler<DisconnectPacket>("d", [this] (DisconnectPacket& p) {
 		auto it = players.find(p.id);
@@ -445,8 +457,8 @@ void Game_Multiplayer::InitConnection() {
 		auto& player = players[p.id];
 		auto scene_map = Scene::Find(Scene::SceneType::Map);
 		if (!scene_map) {
-			Output::Error("unexpected, {}:{}", __FILE__, __LINE__);
-			//return;
+			Output::Debug("unexpected, {}:{}", __FILE__, __LINE__);
+			return;
 		}
 		auto old_list = &DrawableMgr::GetLocalList();
 		DrawableMgr::SetLocalList(&scene_map->GetDrawableList());
@@ -454,6 +466,8 @@ void Game_Multiplayer::InitConnection() {
 		DrawableMgr::SetLocalList(old_list);
 
 		Web_API::OnPlayerNameUpdated(p.name, p.id);
+#ifdef PLAYER_YNO
+#endif
 	});
 	connection.RegisterHandler<CUTimePacket>("cut", [this] (CUTimePacket& p) {
 		if (!Player::IsCollectiveUnconscious()) return;
@@ -488,7 +502,7 @@ void Game_Multiplayer::InitConnection() {
 
 		// sync chat messages
 		if (on_chat_msg) {
-			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMessageId={}", 100, 100, lastmsgid);
+			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMessageId={}", 200, 100, lastmsgid);
 			cpr::Response resp = cpr::Get(cpr::Url{endpoint});
 			if (resp.status_code >= 200 && resp.status_code < 300) {
 				json chatmsgs = json::parse(resp.text);
@@ -506,13 +520,16 @@ void Game_Multiplayer::InitConnection() {
 				for (auto it = messages.begin(); it != messages.end(); ++it) {
 					std::string name = "Unknown Player";
 					std::string system;
+					std::string badge;
 					if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
 						name = player->second.name;
 						system = player->second.systemName;
+						badge = player->second.badge;
 					}
-					on_chat_msg(
-						(std::string)(*it)["contents"], name, system,
-						it != std::prev(messages.end()));
+					on_chat_msg({
+						(std::string)(*it)["contents"], name, system, badge,
+						std::next(it) != messages.end(),
+					});
 				}
 			}
 		}
@@ -520,16 +537,43 @@ void Game_Multiplayer::InitConnection() {
 	sessionConn.RegisterSystemHandler(YSM::CLOSE, [this](MCo&) {
 	});
 	sessionConn.RegisterHandler<SessionGSay>("gsay", [this](SessionGSay& p) {
-		Output::Debug("{}: {}", p.uuid, p.msg);
 		std::string name = "Unknown Player";
 		std::string system;
+		std::string badge;
 		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
-			name = player->second.name;
+			if (!player->second.name.empty())
+				name = player->second.name;
 			system = player->second.systemName;
+			badge = player->second.badge;
 		}
+		Output::Debug("{}: {}", name, p.msg);
 		if (on_chat_msg) {
-			on_chat_msg(p.msg, name, system, false);
+			on_chat_msg({ p.msg, name, system, badge });
 		}
+	});
+	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
+		std::string name = "Unknown Player";
+		std::string system;
+		std::string badge;
+		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
+			if (!player->second.name.empty())
+				name = player->second.name;
+			system = player->second.systemName;
+			badge = player->second.badge;
+		}
+		Output::Debug("{}: {}", name, p.msg);
+		if (on_chat_msg) {
+			on_chat_msg({ p.msg, name, system, badge });
+		}
+	});
+	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
+		auto& player = playerdata[p.uuid];
+		Output::Debug("p: {}", p.name);
+		player.name = p.name;
+		player.systemName = p.systemName;
+		player.rank = p.rank;
+		player.account = p.account;
+		player.badge = p.badge;
 	});
 #endif
 }
