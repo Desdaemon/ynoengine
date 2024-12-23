@@ -235,11 +235,15 @@ class Font {
 	static void SetDefault(FontRef new_default, bool use_mincho);
 	static FontRef NameText();
 	static void SetNameText(FontRef new_name_text, bool slim);
+	static FontRef ChatText();
+	static void SetChatText(FontRef new_chat_text);
 	static void ResetDefault();
 	static void ResetNameText();
 	static void Dispose();
 
 	static FontRef exfont;
+
+	static FontRef chat_font;
 
 	enum SystemColor {
 		ColorShadow = -1,

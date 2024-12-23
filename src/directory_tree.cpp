@@ -30,8 +30,9 @@ static void DebugLog(const char* fmt, Args&&... args) {
 	Output::Debug(fmt, std::forward<Args>(args)...);
 }
 #else
-template <typename... Args>
-static void DebugLog(const char*, Args&&...) {}
+//template <typename... Args>
+//static void DebugLog(const char*, Args&&...) {}
+#define DebugLog(...)
 #endif
 
 namespace {

@@ -86,6 +86,8 @@ namespace Input {
 		TOGGLE_FULLSCREEN,
 		TOGGLE_ZOOM,
 		SHOW_CHAT,
+		CHAT_SCROLL_DOWN,
+		CHAT_SCROLL_UP,
 		BUTTON_COUNT
 	};
 
@@ -132,7 +134,9 @@ namespace Input {
 		"FAST_FORWARD_B",
 		"TOGGLE_FULLSCREEN",
 		"TOGGLE_ZOOM",
-		"SHOW_CHAT");
+		"SHOW_CHAT",
+		"CHAT_SCROLL_DOWN",
+		"CHAT_SCROLL_UP");
 	static_assert(kInputButtonNames.size() == static_cast<size_t>(BUTTON_COUNT));
 
 	constexpr auto kInputButtonHelp = lcf::makeEnumTags<InputButton>(
@@ -178,7 +182,9 @@ namespace Input {
 		"Run the game at x{} speed",
 		"Toggle Fullscreen mode",
 		"Toggle Window Zoom level",
-		"Toggle chat display");
+		"Toggle chat display",
+		"Scroll chat window down",
+		"Scroll chat window up");
 	static_assert(kInputButtonHelp.size() == static_cast<size_t>(BUTTON_COUNT));
 
 	/**

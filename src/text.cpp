@@ -189,6 +189,8 @@ Rect Text::GetSize(const Font& font, std::string_view text) {
 	auto iter = text.data();
 	const auto end = iter + text.size();
 
+	double zoom = font.GetCurrentStyle().size / 12.;
+
 	if (font.CanShape()) {
 		std::u32string text32;
 		while (iter != end) {
@@ -213,7 +215,7 @@ Rect Text::GetSize(const Font& font, std::string_view text) {
 
 					for (const auto& ch: shape_ret) {
 						Rect size = font.GetSize(ch);
-						rect.width += ch.offset.x + size.width;
+						rect.width += ceilf((ch.offset.x + size.width) * zoom);
 						rect.height = std::max(rect.height, size.height);
 					}
 				}
@@ -232,7 +234,7 @@ Rect Text::GetSize(const Font& font, std::string_view text) {
 
 			for (const auto& ch: shape_ret) {
 				Rect size = font.GetSize(ch);
-				rect.width += ch.offset.x + size.width;
+				rect.width += ceilf((ch.offset.x + size.width) * zoom);
 				rect.height = std::max(rect.height, size.height);
 			}
 		}

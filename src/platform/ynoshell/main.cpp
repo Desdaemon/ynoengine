@@ -60,7 +60,7 @@ public:
 	YnoFrame();
 
 	YnoGameContainer* gameWindow;
-	wxTextCtrl* chatInput;
+	//wxTextCtrl* chatInput;
 
 private:
 	void OnKeyDownFrame(wxKeyEvent& event);
@@ -86,6 +86,8 @@ bool YnoApp::OnInit()
 	std::vector<std::string> args{ (char**)app.argv, (char**)app.argv + app.argc };
 	Player::Init(std::move(args));
 	Player::Run();
+
+	return true;
 }
 
 YnoFrame::YnoFrame()
@@ -97,8 +99,8 @@ YnoFrame::YnoFrame()
 	gameWindow->Bind(wxEVT_KEY_DOWN, &YnoFrame::OnKeyDownFrame, this);
 	sizer->Add((wxWindow*)gameWindow, 1, wxEXPAND);
 
-	GMI().on_chat_msg = [](std::string_view msg, std::string_view sender, std::string_view system, bool) {
-		Graphics::GetChatOverlay().AddMessage(msg, sender, system);
+	GMI().on_chat_msg = [](Game_Multiplayer::ChatMsg msg) {
+		Graphics::GetChatOverlay().AddMessage(msg.content, msg.sender, msg.system, msg.badge);
 	};
 
 	SetSizer(sizer);
