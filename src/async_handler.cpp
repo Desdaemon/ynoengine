@@ -20,16 +20,21 @@
 #include <fstream>
 #include <map>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #ifdef EMSCRIPTEN
 #  include <emscripten.h>
 #  include <lcf/reader_util.h>
-#  include <nlohmann/json.hpp>
-   using json = nlohmann::json;
 #elif defined(PLAYER_YNO)
 #  include <lcf/reader_util.h>
 #  include <cpr/cpr.h>
 #  include <uv.h>
+#  include "platform.h"
 #  define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
+#  if defined(_WIN32)
+#    define timegm _mkgmtime
+#  endif
 #endif
 
 #include "async_handler.h"
@@ -52,6 +57,7 @@ namespace {
 	std::unordered_map<std::string, std::string> file_mapping;
 	int next_id = 0;
 	int index_version = 1;
+	int64_t db_lastwrite = LLONG_MAX;
 
 	FileRequestAsync* GetRequest(const std::string& path) {
 		auto it = async_requests.find(path);
@@ -151,17 +157,35 @@ namespace {
 			auto sobj = ctx->obj.lock();
 			if (sobj) {
 				std::string url_(ctx->url);
-				std::string path_(sobj->GetPath());
+				std::string path_(ctx->file);
+				if (path_.empty())
+					path_ = sobj->GetPath();
 				if (!sobj->GetRequestExtension().empty()) {
 					url_ += sobj->GetRequestExtension();
 					path_ += sobj->GetRequestExtension();
 				}
-
 				std::ofstream out(path_, std::ios::binary);
 
-				auto resp = cpr::Download(out, cpr::Url{url_});
-				out.close();
+				auto resp = cpr::Download(out, cpr::Url{ url_ });
 				ctx->http_status = resp.status_code;
+				if (resp.status_code == 0) {
+					ctx->http_status = 1000 + (int)resp.error.code;
+					Output::Debug("failed {}: {}", resp.error.message);
+				}
+				if (ctx->file == "RPG_RT.ldb") {
+					// use this file to determine cache freshness
+					if (auto lm = resp.header.find("last-modified"); lm != resp.header.end()) {
+						std::tm time{};
+						std::istringstream ss(lm->second);
+						ss >> std::get_time(&time, "%a, %d %b %Y %H:%M:%S");
+						if (ss.fail())
+							Output::Debug("could not parse Last-Modified: {}", lm->second);
+						else {
+							Output::Debug("ldb last-modified: {}", lm->second);
+							db_lastwrite = timegm(&time);
+						}
+					}
+				}
 			}
 		},
 		[](uv_work_t *task, int status) {
@@ -190,7 +214,6 @@ namespace {
 }
 
 void AsyncHandler::CreateRequestMapping(const std::string& file) {
-#ifdef EMSCRIPTEN
 	auto f = FileFinder::Game().OpenInputStream(file);
 	if (!f) {
 		Output::Error("Emscripten: Reading index.json failed");
@@ -257,10 +280,6 @@ void AsyncHandler::CreateRequestMapping(const std::string& file) {
 			}
 		}
 	}
-#else
-	// no-op
-	(void)file;
-#endif
 }
 
 void AsyncHandler::ClearRequests() {
@@ -389,14 +408,6 @@ void FileRequestAsync::Start() {
 		request_path = "https://ynoproject.net/data/";
 #  endif
 
-#ifndef EMSCRIPTEN
-	// TODO correct this
-	if (!parent_scope) {
-		DownloadDone(true);
-		return;
-	}
-#endif
-
 	//if (!Player::emscripten_game_name.empty()) {
 	//	request_path += Player::emscripten_game_name + "/";
 	//} else {
@@ -433,7 +444,7 @@ void FileRequestAsync::Start() {
 	if (it != file_mapping.end()) {
 		request_path += it->second;
 	} else {
-		if (file_mapping.empty()) {
+		if (file_mapping.empty() || parent_scope) {
 			// index.json not fetched yet, fallthrough and fetch
 			std::string path_(this->path);
 			size_t offset;
@@ -452,8 +463,19 @@ void FileRequestAsync::Start() {
 	request_path = Utils::ReplaceAll(request_path, "%", "%25");
 	request_path = Utils::ReplaceAll(request_path, "#", "%23");
 	request_path = Utils::ReplaceAll(request_path, "+", "%2B");
+	request_path = Utils::ReplaceAll(request_path, " ", "%20");
 
 	std::string request_file = (it != file_mapping.end() ? it->second : path);
+
+#ifndef EMSCRIPTEN
+	auto handle = Platform::File{std::string(request_file)};
+	auto lastmodified = handle.GetLastModified();
+	if (lastmodified >= db_lastwrite) {
+		DownloadDone(true);
+		return;
+	}
+#endif
+
 	async_wget_with_retry(request_path, std::move(request_file), "", this);
 #else
 #  ifdef EM_GAME_URL

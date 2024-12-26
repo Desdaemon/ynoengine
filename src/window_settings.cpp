@@ -39,7 +39,11 @@
 #  include "platform/emscripten/interface.h"
 #endif
 
-class MenuItem final : public ConfigParam<std::string_view> {
+#ifdef PLAYER_YNO
+#  include "multiplayer/messages.h"
+#endif
+
+class MenuItem final : public ConfigParam<StringView> {
 public:
 	explicit MenuItem(std::string_view name, std::string_view description, std::string_view value) :
 		ConfigParam<std::string_view>(name, description, "", "", value) {
@@ -151,6 +155,9 @@ void Window_Settings::Refresh() {
 			break;
 		case eLicense:
 			RefreshLicense();
+			break;
+		case eOnlineAccount:
+			RefreshOnline();
 			break;
 		case eInputButtonCategory:
 			RefreshButtonCategory();
@@ -268,6 +275,21 @@ void Window_Settings::AddOption(const EnumConfigParam<T, S>& param,
 	if (!param.IsLocked()) {
 		opt.action = std::forward<Action>(action);
 	}
+	GetFrame().options.push_back(std::move(opt));
+}
+
+template <typename Action>
+void Window_Settings::AddOption(const StringConfigParam& param, Action&& action) {
+	if (!param.IsOptionVisible()) {
+		return;
+	}
+	Option opt;
+	opt.text = ToString(param.GetName());
+	opt.help = ToString(param.GetDescription());
+	opt.value_text = param.Get();
+	opt.mode = eOptionStringInput;
+	if (!param.IsLocked())
+		opt.action = std::forward<Action>(action);
 	GetFrame().options.push_back(std::move(opt));
 }
 
@@ -727,4 +749,59 @@ void Window_Settings::RefreshButtonList() {
 				Push(eInputButtonOption, static_cast<int>(button));
 			});
 	}
+}
+
+void Window_Settings::RefreshOnline() {
+	Game_ConfigOnline& cfg = GMI().GetConfig();
+
+	if (!cfg.username.Get().empty() && !cfg.session_token.Get().empty()) {
+		AddOption(MenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});
+		AddOption(MenuItem("Logout", "", ""), [this] {
+			GMI().Logout();
+			Refresh();
+		});
+	}
+	else {
+		if (cfg.username.Get().empty())
+			AddOption(MenuItem("Status", "", "Username not set"), [] {});
+		else
+			AddOption(MenuItem("Status", "", fmt::format("Playing as guest user")), [] {});
+		
+		AddOption(cfg.username, [this, &cfg] {
+			auto& value = GetCurrentOption().value_text;
+			cfg.username.Set(value);
+			if (!value.empty() && GMI().sessionConn.IsConnected() && Input::IsRawKeyTriggered(Input::Keys::RETURN)) {
+				GMI().SetNickname(value);
+				//Output::Debug("set: {}", value);
+			}
+		});
+		AddOption(cfg.password, [this, &cfg] {
+			cfg.password.Set(GetCurrentOption().value_text);
+		});
+		if (!GMI().login_failure.empty()) {
+			AddOption(MenuItem(GMI().login_failure, "", ""), [] {});
+		}
+		AddOption(MenuItem("Login", "", ""), [this, &cfg] {
+			GMI().Login(cfg.username.Get(), cfg.password.Get());
+			cfg.password.Set("");
+			Refresh();
+		});
+		AddOption(MenuItem("Register", "", ""), [this, &cfg] {
+			Output::Warning("Register not implemented");
+			cfg.password.Set("");
+			Refresh();
+		});
+	}
+
+	AddOption(cfg.nametag_mode, [this, &cfg] {
+		int option = GetCurrentOption().current_value;
+		cfg.nametag_mode.Set((ConfigEnum::NametagMode)option);
+		GMI().SetNametagMode(option);
+	});
+
+	// some debug options
+	AddOption(MenuItem("[DEBUG] Force Disconnect Session", "", ""), [] {
+		Scene::PopUntil(Scene::SceneType::Map);
+		GMI().sessionConn.Open(GMI().GetSessionEndpoint());
+	});
 }

@@ -206,6 +206,9 @@ void Player::Init(std::vector<std::string> args) {
 
 	Input::Init(cfg.input, replay_input_path, record_input_path);
 	Input::AddRecordingData(Input::RecordingData::CommandLine, command_line);
+#ifdef PLAYER_YNO
+	GMI().SetConfig(cfg.online);
+#endif
 
 	player_config = std::move(cfg.player);
 	speed_modifier_a = cfg.input.speed_modifier_a.Get();
@@ -1134,9 +1137,9 @@ void Player::LoadFonts() {
 		Font::SetNameText(Font::CreateFtFont(std::move(name_text), 11, false, false), false);
 	}
 	
-	auto chat_text = FileFinder::OpenFont("ChatText");
+	auto chat_text = FileFinder::OpenFont("NameText");
 	if (chat_text) {
-		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 36, false, false));
+		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 11, false, false));
 	}
 
 	auto name_text_2 = FileFinder::OpenFont("NameText2");
