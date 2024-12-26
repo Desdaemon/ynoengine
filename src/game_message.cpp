@@ -169,17 +169,17 @@ int Game_Message::WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, cons
 				} while (next < line.size());
 
 				line_width += last_width;
-				if (last_width == 0 || must_break) {
-					flush();
-				}
 
 				if (start == next - 1) {
 					start = next;
+					if (must_break) {
+						flush();
+					}
 					continue;
 				}
 
 				auto wrapped = line.substr(start, (next - 1) - start);
-				line_spans.emplace_back(std::make_shared<ChatString>(wrapped));
+				line_spans.emplace_back(std::make_shared<ChatString>(wrapped, fragment->color));
 				if (must_break)
 					flush();
 
@@ -187,7 +187,7 @@ int Game_Message::WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, cons
 			} while (start < line.size());
 		}
 		else if (auto box = span->get()->Downcast<ChatComponents::Box>()) {
-			int width = box->x;
+			int width = box->GetSize().x;
 			if (line_width + width > limit) {
 				// next line por favor
 				flush();

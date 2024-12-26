@@ -40,9 +40,16 @@
 #include "yno_connection.h"
 #include "messages.h"
 
-#ifndef EMSCRIPTEN
+#ifdef PLAYER_YNO
+#  include <functional>
 #  include <cpr/cpr.h>
 #  include <nlohmann/json.hpp>
+#  include <uv.h>
+#  include "scene_settings.h"
+#  include "chat_overlay.h"
+#  include "graphics.h"
+
+using namespace std::literals::chrono_literals;
 using json = nlohmann::json;
 #endif
 
@@ -54,6 +61,9 @@ Game_Multiplayer& Game_Multiplayer::Instance() {
 
 Game_Multiplayer::Game_Multiplayer() {
 	InitConnection();
+	for (auto& timer : timers) {
+		timer = Game_Clock::GetFrameTime();
+	}
 }
 
 void Game_Multiplayer::SpawnOtherPlayer(int id) {
@@ -244,12 +254,15 @@ void Game_Multiplayer::InitConnection() {
 			return;
 		if (players.find(p.id) == players.end()) SpawnOtherPlayer(p.id);
 		players[p.id].account = p.account_bin == 1;
+		players[p.id].uuid = p.uuid;
 
 		UpdateNBPlayers();
 
 		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals, p.id);
 #ifdef PLAYER_YNO
 		auto& player = playerdata[p.uuid];
+		if (players[p.id].chat_name)
+			player.name = players[p.id].chat_name->nickname;
 		player.rank = p.rank;
 		player.badge = p.badge;
 		player.account = p.account_bin == 1;
@@ -467,6 +480,9 @@ void Game_Multiplayer::InitConnection() {
 
 		Web_API::OnPlayerNameUpdated(p.name, p.id);
 #ifdef PLAYER_YNO
+		if (auto pdata = playerdata.find(player.uuid); pdata != playerdata.end()) {
+			pdata->second.name = p.name;
+		}
 #endif
 	});
 	connection.RegisterHandler<CUTimePacket>("cut", [this] (CUTimePacket& p) {
@@ -502,11 +518,10 @@ void Game_Multiplayer::InitConnection() {
 
 		// sync chat messages
 		if (on_chat_msg) {
-			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMessageId={}", 200, 100, lastmsgid);
+			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMsgId={}", 200, 100, lastmsgid);
 			cpr::Response resp = cpr::Get(cpr::Url{endpoint});
 			if (resp.status_code >= 200 && resp.status_code < 300) {
 				json chatmsgs = json::parse(resp.text);
-				//playerdata = std::move(chatmsgs["players"]);
 				for (auto& it : chatmsgs["players"]) {
 					auto& entry = playerdata[(std::string)it["uuid"]];
 					entry.name = it["name"];
@@ -521,49 +536,70 @@ void Game_Multiplayer::InitConnection() {
 					std::string name = "Unknown Player";
 					std::string system;
 					std::string badge;
+					bool account = false;
 					if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
 						name = player->second.name;
 						system = player->second.systemName;
 						badge = player->second.badge;
+						account = player->second.account;
 					}
+					std::string contents((*it)["contents"]);
 					on_chat_msg({
-						(std::string)(*it)["contents"], name, system, badge,
-						std::next(it) != messages.end(),
+						contents, name, system, badge,
+						/*syncing: */std::next(it) != messages.end(),
+						account,
 					});
+					lastmsgid = (std::string)(*it)["msgId"];
+				}
+				if (!username.empty()) {
+					if (session_token.empty())
+						Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as <{}>.", username));
+					else
+						Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as [{}].", username));
+				}
+				else {
+					Graphics::GetChatOverlay().AddSystemMessage(
+						"Welcome to YNOproject! To join the chat, first set your name in the Online settings.");
 				}
 			}
 		}
 	});
 	sessionConn.RegisterSystemHandler(YSM::CLOSE, [this](MCo&) {
+		session_active = false;
 	});
 	sessionConn.RegisterHandler<SessionGSay>("gsay", [this](SessionGSay& p) {
 		std::string name = "Unknown Player";
 		std::string system;
 		std::string badge;
+		bool account = false;
 		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
 			badge = player->second.badge;
+			account = player->second.account;
 		}
-		Output::Debug("{}: {}", name, p.msg);
+		Output::Debug("(gc) {}: {}", name, p.msg);
 		if (on_chat_msg) {
-			on_chat_msg({ p.msg, name, system, badge });
+			on_chat_msg({ p.msg, name, system, badge, account });
+			lastmsgid = p.msgid;
 		}
 	});
 	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
 		std::string name = "Unknown Player";
 		std::string system;
 		std::string badge;
+		bool account = false;
 		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
 			badge = player->second.badge;
+			account = player->second.account;
 		}
-		Output::Debug("{}: {}", name, p.msg);
+		Output::Debug("(mc) {}: {}", name, p.msg);
 		if (on_chat_msg) {
-			on_chat_msg({ p.msg, name, system, badge });
+			on_chat_msg({ p.msg, name, system, badge, account, /*global: */false });
 		}
 	});
 	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
@@ -619,25 +655,13 @@ void Game_Multiplayer::Initialize() {
 }
 
 void Game_Multiplayer::InitSession() {
-#ifndef EMSCRIPTEN
-	std::string formdata = "user=&password=";
-	std::string sessionEndpoint = Web_API::GetSocketURL() + "session";
-	cpr::Header header;
-	header["Content-Type"] = "application/x-www-form-urlencoded";
+#ifdef PLAYER_YNO
+	if (!session_token.empty() || !cfg.session_token.Get().empty()) {
+		CheckLogin(false);
+	}
 
-	auto resp = cpr::Post(
-		cpr::Url{ "https://connect.ynoproject.net/2kki/api/login" },
-		cpr::Body{ formdata },
-		header);
-	if (resp.status_code >= 200 && resp.status_code < 300) {
-		session_token = resp.text;
-		sessionEndpoint += "?token=" + session_token;
-	}
-	else {
-		Output::Debug("login: {} {}", resp.status_code, resp.text);
-	}
 	sessionConn.need_header = false;
-	sessionConn.Open(sessionEndpoint);
+	sessionConn.Open(GetSessionEndpoint());
 #endif
 }
 
@@ -841,7 +865,8 @@ void Game_Multiplayer::ApplyPlayerBattleAnimUpdates() {
 void Game_Multiplayer::ApplyFlash(int r, int g, int b, int power, int frames) {
 	for (auto& p : players) {
 		p.second.ch->Flash(r, g, b, power, frames);
-		p.second.chat_name->SetFlashFramesLeft(frames);
+		if (p.second.chat_name)
+			p.second.chat_name->SetFlashFramesLeft(frames);
 	}
 }
 
@@ -1031,4 +1056,110 @@ void Game_Multiplayer::Update() {
 		sessionConn.FlushQueue();
 #endif
 	}
+
+	UpdateTimers();
+}
+
+void Game_Multiplayer::SetConfig(const Game_ConfigOnline& cfg) {
+	this->cfg = cfg;
+	session_token = cfg.session_token.Get();
+	SetNametagMode((int)cfg.nametag_mode.Get());
+	if (!cfg.username.Get().empty())
+		SetNickname(cfg.username.Get());
+}
+
+std::string Game_Multiplayer::GetSessionEndpoint() const {
+	return fmt::format("{}session?token={}", Web_API::GetSocketURL(), session_token);
+}
+
+void Game_Multiplayer::CheckLogin(bool async) {
+	std::string token = session_token;
+	if (token.empty())
+		token = cfg.session_token.Get();
+	if (token.empty()) return;
+	session_token = token;
+
+	if (async) {
+		uv_queue_work(uv_default_loop(), new uv_work_t{},
+		[](uv_work_t*) { GMI().CheckLogin(false); },
+		[](uv_work_t* task, int) { delete task; });
+		return;
+	}
+
+	cpr::Header header;
+	header["Authorization"] = token;
+	auto resp = cpr::Get(cpr::Url{ "https://connect.ynoproject.net/2kki/api/info" }, header);
+	CheckLoginCallback(resp);
+}
+
+void Game_Multiplayer::CheckLoginCallback(cpr::Response resp) {
+	if (!(resp.status_code >= 200 && resp.status_code < 300))
+		return;
+	json body = json::parse(resp.text);
+	std::string uuid(body["uuid"]);
+	if (uuid.empty())
+		Logout();
+	else {
+		username = (std::string)body["name"];
+		cfg.username.Set(username);
+		Output::Debug("username: {}", username);
+	}
+	Graphics::GetChatOverlay().MarkDirty();
+}
+
+void Game_Multiplayer::Login(std::string_view username, std::string_view password) {
+	std::string formdata = fmt::format("user={}&password={}", username, password);
+	cpr::Header header;
+	header["Content-Type"] = "application/x-www-form-urlencoded";
+
+	auto resp = cpr::Post(
+		cpr::Url{ "https://connect.ynoproject.net/2kki/api/login" },
+		cpr::Body{ formdata }, header);
+	if (resp.status_code >= 200 && resp.status_code < 300) {
+		login_failure.clear();
+		session_token = resp.text;
+		cfg.session_token.Set(session_token);
+		CheckLogin(false);
+		ReconnectSession();
+	}
+	else {
+		Output::Warning("login failed: {} {}", resp.status_code, resp.text);
+		login_failure = resp.text;
+	}
+}
+
+void Game_Multiplayer::Logout() {
+	session_token.clear();
+	cfg.session_token.Set("");
+	ReconnectSession();
+}
+
+void Game_Multiplayer::ReconnectSession() {
+	Scene_Settings::SaveConfig(true);
+	sessionConn.Open(GetSessionEndpoint());
+}
+
+void Game_Multiplayer::UpdateTimers() {
+	auto now = Game_Clock::GetFrameTime();
+
+	if (!sessionConn.IsConnected() && session_active) {
+		if (now - timers[Timers::conn_check] > 5s) {
+			Graphics::GetChatOverlay().AddSystemMessage("Session disconnected, attempting to reconnect...");
+			timers[Timers::conn_check] = now;
+			sessionConn.Open(GetSessionEndpoint());
+		}
+	}
+
+	if (now - timers[Timers::token_check] > 600s) {
+		timers[Timers::token_check] = now;
+		CheckLogin();
+	}
+}
+
+void Game_Multiplayer::SetNickname(StringView name) {
+	std::string value(name);
+	GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionPlayerName>(value);
+	username = value;
+	cfg.username.Set(value);
+	Graphics::GetChatOverlay().MarkDirty();
 }

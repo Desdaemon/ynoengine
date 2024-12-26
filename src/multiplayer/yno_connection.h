@@ -19,11 +19,12 @@ public:
 	YNOConnection& operator=(YNOConnection&&);
 	~YNOConnection();
 
+	bool need_header = true;
+
 	void Open(std::string_view uri) override;
-	void Close() override;
 	void Send(std::string_view data) override;
 	void FlushQueue() override;
-	bool need_header = true;
+	void Close() override;
 protected:
 	struct IMPL;
 	std::unique_ptr<IMPL> impl;
@@ -52,9 +53,9 @@ public:
 	inline void RequestFlush() {
 		lws_callback_on_writable(wsi_);
 	}
-private:
 	static int CallbackFunction(struct lws* wsi, enum lws_callback_reasons reason,
 		void* user, void* in, size_t len);
+private:
 
 	static inline struct lws_protocols protocols_[] = {
 		{"binary", CallbackFunction, 0, 65536, 0, nullptr, 0},

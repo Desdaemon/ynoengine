@@ -513,7 +513,8 @@ inline bool Player::IsPatchDestiny() {
 }
 
 inline bool Player::HasEasyRpgExtensions() {
-	return game_config.patch_easyrpg.Get();
+	return true;
+	//return game_config.patch_easyrpg.Get();
 }
 
 inline bool Player::IsCollectiveUnconscious() {

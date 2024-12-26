@@ -17,7 +17,8 @@ public:
 	bool OnInit() override;
 };
 
-wxIMPLEMENT_APP(YnoApp);
+//wxIMPLEMENT_APP(YnoApp);
+wxIMPLEMENT_APP_NO_MAIN(YnoApp);
 
 //class YnoChatMsg : public wxPanel
 //{
@@ -100,7 +101,7 @@ YnoFrame::YnoFrame()
 	sizer->Add((wxWindow*)gameWindow, 1, wxEXPAND);
 
 	GMI().on_chat_msg = [](Game_Multiplayer::ChatMsg msg) {
-		Graphics::GetChatOverlay().AddMessage(msg.content, msg.sender, msg.system, msg.badge);
+		Graphics::GetChatOverlay().AddMessage(msg.content, msg.sender, msg.system, msg.badge, msg.account);
 	};
 
 	SetSizer(sizer);
@@ -116,3 +117,7 @@ void YnoFrame::OnKeyDownFrame(wxKeyEvent& event) {
 	event.Skip();
 }
 
+int main(int argc, char** argv) {
+	Output::SetLogLevel(LogLevel::Debug);
+	wxEntry(argc, argv);
+}

@@ -53,13 +53,16 @@ public:
 		eEnd,
 		eAbout,
 		eLanguage,
+		// online only
+		eOnlineAccount,
 		eLastMode
 	};
 
 	enum OptionMode {
 		eOptionNone,
 		eOptionRangeInput,
-		eOptionPicker
+		eOptionPicker,
+		eOptionStringInput,
 	};
 
 	struct Option {
@@ -140,6 +143,9 @@ private:
 			Action&& action
 	);
 
+	template <typename Action>
+	void AddOption(const StringConfigParam& p, Action&& action);
+
 	void RefreshInput();
 	void RefreshButtonCategory();
 	void RefreshButtonList();
@@ -150,6 +156,7 @@ private:
 	void RefreshEngine();
 	void RefreshEngineFont(bool mincho);
 	void RefreshLicense();
+	void RefreshOnline();
 
 	void UpdateHelp() override;
 

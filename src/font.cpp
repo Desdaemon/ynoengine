@@ -378,6 +378,8 @@ Rect FTFont::vGetSize(char32_t glyph) const {
 
 	FT_GlyphSlot slot = face->glyph;
 
+	//double zoom = current_style.size / (double)original_style.size;
+
 	Point advance;
 	advance.x = Utils::RoundTo<int>(slot->advance.x / 64.0);
 	advance.y = Utils::RoundTo<int>(slot->advance.y / 64.0);
@@ -769,7 +771,7 @@ Rect Font::GetSize(char32_t glyph) const {
 
 	Rect size = vGetSize(glyph);
 	size.width += current_style.letter_spacing;
-	size.width = ceilf(size.width * (current_style.size / 12.));
+	size.width = ceilf(size.width * (current_style.size / (double)original_style.size));
 	size.height = current_style.size;
 
 	return size;
@@ -778,8 +780,8 @@ Rect Font::GetSize(char32_t glyph) const {
 Rect Font::GetSize(const ShapeRet& shape_ret) const {
 	int width = shape_ret.advance.x + current_style.letter_spacing;
 	int height = current_style.size;
-	return {0, 0, width, height};
-	return {0, 0, (int)ceilf(width * (current_style.size / 12.)), height};
+	//return {0, 0, width, height};
+	return {0, 0, (int)ceilf(width * (current_style.size / (double)original_style.size)), height};
 }
 
 Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, int color, char32_t glyph) const {
@@ -794,6 +796,7 @@ Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, in
 	}
 
 	gret.advance.x += current_style.letter_spacing;
+	gret.advance.x = ceilf(gret.advance.x * GetScaleRatio());
 
 	return gret.advance;
 }
@@ -809,9 +812,10 @@ Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, in
 		return {};
 	}
 
-	double zoom = current_style.size / 12.;
+	double zoom = current_style.size / (double)original_style.size;
 
 	Point advance = { (int)ceilf((shape.advance.x + current_style.letter_spacing) * zoom), shape.advance.y };
+	//Point advance = { shape.advance.x + current_style.letter_spacing, shape.advance.y };
 	return advance;
 }
 
@@ -828,7 +832,7 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 	// Drawing position of the glyph
 	rect.x += gret.offset.x;
 	rect.y -= gret.offset.y;
-	double zoom = 12. / current_style.size;
+	double zoom = original_style.size / (double)current_style.size;
 	if (zoom != 1) {
 		rect.width = ceilf(rect.width / zoom);
 		rect.height = ceilf(rect.height / zoom);
@@ -891,8 +895,9 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 	if (color != ColorShadow) {
 		// First draw the shadow, offset by one
 		if (!gret.has_color && current_style.draw_shadow) {
-			int ozoom = ceilf(1 / zoom);
+			int ozoom = floorf(1 / zoom);
 			auto shadow_rect = Rect(rect.x + ozoom, rect.y + ozoom, rect.width, rect.height);
+			//auto shadow_rect = Rect(rect.x, rect.y, rect.width, rect.height);
 			dest.MaskedBlit(shadow_rect, *gret.bitmap, 0, 0, sys, 16, 32, zoom, zoom);
 		}
 
@@ -914,10 +919,12 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 			}
 
 			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, sys, src_x, src_y, zoom, zoom);
+			//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, sys, src_x, src_y);
 		} else {
 			auto col = sys.GetColorAt(current_style.color_offset.x + src_x, current_style.color_offset.y + src_y);
 			auto col_bm = Bitmap::Create(gret.bitmap->width(), gret.bitmap->height(), col);
 			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0, zoom, zoom);
+			//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0);
 		}
 	} else {
 		// Color glyphs, emojis etc.
@@ -937,10 +944,12 @@ Point Font::Render(Bitmap& dest, int x, int y, Color const& color, char32_t glyp
 		return {};
 	}
 
-	double zoom = 12. / current_style.size;
+	double zoom = original_style.size / (double)current_style.size;
 	auto rect = Rect(x, y,
 		ceilf(gret.bitmap->width() / zoom),
 		ceilf(gret.bitmap->height() / zoom));
+	//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, color, zoom, zoom);
+	//auto rect = Rect(x, y, gret.bitmap->width(), gret.bitmap->height());
 	dest.MaskedBlit(rect, *gret.bitmap, 0, 0, color, zoom, zoom);
 
 	gret.advance.x += current_style.letter_spacing;

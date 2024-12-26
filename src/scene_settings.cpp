@@ -44,8 +44,16 @@
 #  include <emscripten.h>
 #endif
 
+#ifdef PLAYER_YNO
+#  include "multiplayer/game_multiplayer.h"
+#endif
+
 Scene_Settings::Scene_Settings() {
 	Scene::type = Scene::Settings;
+}
+
+Scene_Settings::Scene_Settings(Window_Settings::UiMode initial_mode) : Scene_Settings() {
+	mode = initial_mode;
 }
 
 void Scene_Settings::CreateTitleGraphic() {
@@ -68,6 +76,7 @@ void Scene_Settings::CreateMainWindow() {
 		{ Window_Settings::eInput,	"Input"},
 		{ Window_Settings::eEngine,	"Engine"},
 		{ Window_Settings::eLicense,"License"},
+		{ Window_Settings::eOnlineAccount, "Online"},
 		{ Window_Settings::eSave,	"<Save Settings>"}
 	});
 
@@ -135,8 +144,13 @@ void Scene_Settings::Start() {
 	CreateMainWindow();
 	CreateOptionsWindow();
 
-	options_window->Push(Window_Settings::eMain);
-	SetMode(Window_Settings::eMain);
+	auto start_mode = Window_Settings::eMain;
+	if (mode != Window_Settings::eNone) {
+		start_mode = mode;
+		mode = Window_Settings::eNone;
+	}
+	options_window->Push(start_mode);
+	SetMode(start_mode);
 }
 
 void Scene_Settings::SetMode(Window_Settings::UiMode new_mode) {
@@ -160,6 +174,7 @@ void Scene_Settings::SetMode(Window_Settings::UiMode new_mode) {
 
 	picker_window.reset();
 	font_size_window.reset();
+	string_window.reset();
 
 	switch (mode) {
 		case Window_Settings::eNone:
@@ -226,6 +241,14 @@ void Scene_Settings::vUpdate() {
 
 	SetMode(opt_mode);
 
+	if (string_window) {
+		if (Input::IsRawKeyTriggered(Input::Keys::ESCAPE)) {
+			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Game_System::SFX_Cancel));
+			string_window.reset();
+			options_window->SetActive(true);
+		}
+	}
+	else
 	if (Input::IsTriggered(Input::CANCEL) && opt_mode != Window_Settings::eInputButtonAdd) {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Game_System::SFX_Cancel));
 
@@ -277,6 +300,7 @@ void Scene_Settings::vUpdate() {
 		case Window_Settings::eInputListButtonsEngine:
 		case Window_Settings::eInputListButtonsDeveloper:
 		case Window_Settings::eInputListButtonsOnline:
+		case Window_Settings::eOnlineAccount:
 			UpdateOptions();
 			break;
 		case Window_Settings::eEngineFont1:
@@ -375,6 +399,20 @@ void Scene_Settings::UpdateOptions() {
 		}
 		return;
 	}
+	else if (string_window) {
+		string_window->Update();
+		auto& option = options_window->GetCurrentOption();
+		option.value_text = string_window->value;
+		option.action();
+
+		if (Input::IsRawKeyTriggered(Input::Keys::RETURN)) {
+			options_window->Refresh();
+			string_window.reset();
+			options_window->SetActive(true);
+			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Game_System::SFX_Decision));
+		}
+		return;
+	}
 
 	if (Input::IsTriggered(Input::DECISION)) {
 		if (options_window->IsCurrentActionEnabled()) {
@@ -406,6 +444,15 @@ void Scene_Settings::UpdateOptions() {
 				picker_window->UpdateHelpFn = [this](Window_Help& win, int index) {
 					win.SetText(options_window->GetCurrentOption().options_help[index]);
 				};
+			}
+			else if (option.mode == Window_Settings::eOptionStringInput) {
+				string_window.reset(new Window_StringInput(option.value_text, 0, 0, 128, 32));
+				string_window->SetX(options_window->GetX() + options_window->GetWidth() / 2 - string_window->GetWidth() / 2);
+				string_window->SetY(options_window->GetY() + options_window->GetHeight() / 2 - string_window->GetHeight() / 2);
+				string_window->SetZ(options_window->GetZ() + 1);
+				string_window->SetOpacity(255);
+				string_window->SetActive(true);
+				options_window->SetActive(false);
 			}
 		} else {
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Game_System::SFX_Buzzer));
@@ -667,6 +714,7 @@ bool Scene_Settings::SaveConfig(bool silent) {
 	cfg.audio = Audio().GetConfig();
 	cfg.input = Input::GetInputSource()->GetConfig();
 	cfg.player = Player::player_config;
+	cfg.online = GMI().GetConfig();
 
 	cfg.WriteToStream(cfg_out);
 
