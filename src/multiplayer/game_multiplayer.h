@@ -10,6 +10,12 @@
 #include <lcf/rpg/sound.h>
 #include "yno_connection.h"
 
+#ifdef PLAYER_YNO
+#  include <cpr/cpr.h>
+#  include "game_config.h"
+#  include "game_clock.h"
+#endif
+
 class PlayerOther;
 
 class Game_Multiplayer {
@@ -78,6 +84,8 @@ public:
 		std::string_view system;
 		std::string_view badge;
 		bool syncing = false;
+		bool account = true;
+		bool global = true;
 	};
 	std::function<void(ChatMsg)> on_chat_msg;
 	std::function<void(std::string_view system)> on_system_graphic_change;
@@ -93,12 +101,7 @@ public:
 	int room_id{-1};
 	int frame_index{-1};
 
-	enum class NametagMode {
-		NONE,
-		CLASSIC,
-		COMPACT,
-		SLIM
-	};
+	using NametagMode = ConfigEnum::NametagMode;
 
 	enum GlobalVariables {
 		CU_RANDINT = 1231,
@@ -148,8 +151,37 @@ public:
 	void SpawnOtherPlayer(int id);
 	void ResetRepeatingFlash();
 	void InitConnection();
+
+	std::string username;
+	std::string login_failure;
+	Game_ConfigOnline cfg;
+
+	Game_ConfigOnline& GetConfig() noexcept;
+	void SetConfig(const Game_ConfigOnline& cfg);
+	std::string GetSessionEndpoint() const;
+	/** Logs the player out if the session token is no longer valid  */
+	void CheckLogin(bool async = true);
+	void CheckLoginCallback(cpr::Response resp);
+	void Login(std::string_view username, std::string_view password);
+	void Logout();
+	void ReconnectSession();
+	bool CanChat() const noexcept;
+
+	enum Timers {
+		conn_check,
+		token_check,
+		END
+	};
+
+	std::array<Game_Clock::time_point, Timers::END> timers{};
+
+	void UpdateTimers();
+	void SetNickname(StringView name);
 };
 
 inline Game_Multiplayer& GMI() { return Game_Multiplayer::Instance(); }
+
+inline Game_ConfigOnline& Game_Multiplayer::GetConfig() noexcept { return cfg; }
+inline bool Game_Multiplayer::CanChat() const noexcept { return !username.empty(); }
 
 #endif

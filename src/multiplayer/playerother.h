@@ -3,6 +3,7 @@
 
 #include <deque>
 #include <memory>
+#include <string>
 
 struct Game_PlayerOther;
 struct Sprite_Character;
@@ -16,6 +17,8 @@ struct PlayerOther {
 	std::unique_ptr<Sprite_Character> sprite;
 	std::unique_ptr<ChatName> chat_name;
 	std::unique_ptr<BattleAnimation> battle_animation; // battle animation
+
+	std::string uuid;
 
 	// create a shadow of this
 	// shadow has no name, no battle animation and no move commands

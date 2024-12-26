@@ -653,7 +653,7 @@ namespace C2S {
 		int event_id;
 		int action_bin;
 	};
-#ifndef EMSCRIPTEN
+#ifdef PLAYER_YNO
 	class SessionPlayerName : public C2SPacket {
 	public:
 		SessionPlayerName(std::string name_) : C2SPacket("name"),
@@ -661,6 +661,14 @@ namespace C2S {
 		std::string ToBytes() const override { return Build(name); }
 	protected:
 		std::string name;
+	};
+	class SessionGSay : public C2SPacket {
+	public:
+		SessionGSay(std::string contents) : C2SPacket("gsay"),
+			contents(std::move(contents)) {}
+		std::string ToBytes() const override { return Build(contents); }
+	protected:
+		std::string contents;
 	};
 #endif
 }

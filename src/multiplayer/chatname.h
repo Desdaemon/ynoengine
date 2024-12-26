@@ -21,9 +21,10 @@ public:
 
 	void SetTransparent(bool val);
 
+	std::string nickname;
+	std::string uuid;
 private:
 	PlayerOther& player;
-	std::string nickname;
 	BitmapRef nick_img;
 	BitmapRef sys_graphic;
 	BitmapRef effects_img;

@@ -12,6 +12,9 @@
 #  include <thread>
 #  include <uv.h>
 #  include <cpr/cpr.h>
+#  if defined(_WIN32)
+#    include <synchapi.h>
+#  endif
 #endif
 #include "../external/TinySHA1.hpp"
 
@@ -106,6 +109,36 @@ struct YNOConnection::IMPL {
 #endif
 };
 
+namespace {
+	lws_context* default_context;
+
+	static struct lws_protocols protocols_[] = {
+		{"binary", WebSocketClient::CallbackFunction, 0, 65536, 0, nullptr, 0},
+		{nullptr, nullptr}  // terminator
+	};
+
+	lws_context* GetDefaultContext() {
+		if (default_context)
+			return default_context;
+		struct lws_context_creation_info info = {};
+		info.options = 0
+			| LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT
+			| LWS_SERVER_OPTION_LIBUV
+			;
+		uv_loop_t* loop = uv_default_loop();
+		info.protocols = protocols_;
+		info.foreign_loops = (void **)&loop;
+		info.port = CONTEXT_PORT_NO_LISTEN;
+		info.fd_limit_per_thread = 1 + 1 + 1;
+
+		default_context = lws_create_context(&info);
+		if (!default_context) {
+			Output::ErrorStr("Failed to create LWS context");
+		}
+		return default_context;
+	}
+}
+
 #ifndef EMSCRIPTEN
 WebSocketClient::WebSocketClient(const std::string& url) : url_(url), context_(nullptr), wsi_(nullptr), running_(false), userdata_(nullptr) {
 }
@@ -117,22 +150,7 @@ WebSocketClient::~WebSocketClient() {
 void WebSocketClient::Start() {
 	if (running_) return;
 
-	struct lws_context_creation_info info = {};
-	info.options = 0
-		| LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT
-		| LWS_SERVER_OPTION_LIBUV
-		;
-	uv_loop_t* loop = uv_default_loop();
-	info.protocols = protocols_;
-	info.foreign_loops = (void **)&loop;
-	info.port = CONTEXT_PORT_NO_LISTEN;
-	info.fd_limit_per_thread = 1 + 1 + 1;
-	info.user = this;
-
-	context_ = lws_create_context(&info);
-	if (!context_) {
-		Output::ErrorStr("Failed to create LWS context");
-	}
+	context_ = GetDefaultContext();
 
 	const char *prot, *addr, *path;
 	int port;
@@ -149,21 +167,24 @@ void WebSocketClient::Start() {
 	ccinfo.origin = lws_canonical_hostname(context_);
 	ccinfo.ssl_connection = LCCSCF_USE_SSL;
 	ccinfo.protocol = protocols_[0].name;
+	ccinfo.opaque_user_data = this;
 
 	wsi_ = lws_client_connect_via_info(&ccinfo);
 	if (!wsi_) {
 		lws_context_destroy(context_);
-		Output::ErrorStr("Failed to connect to the WebSocket server");
+		Output::Debug("Failed to connect to the WebSocket server");
+		return;
 	}
 
 	running_.store(true, std::memory_order_acquire);
 }
 
 void WebSocketClient::Stop() {
-	Output::Debug("Stopping {}", url_);
 	if (!running_) return;
+	Output::Debug("Stopping {}", url_);
 	running_.store(false, std::memory_order_release);
 	lws_set_timeout(wsi_, PENDING_TIMEOUT_AWAITING_PROXY_RESPONSE, LWS_TO_KILL_ASYNC);
+	//lws_cancel_service(lws_get_context(wsi_));
 }
 
 void WebSocketClient::Send(std::string_view data) {
@@ -174,7 +195,26 @@ void WebSocketClient::Send(std::string_view data) {
 int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons reason,
 	void* user, void* in, size_t len) {
 
-	WebSocketClient* client = reinterpret_cast<WebSocketClient*>(lws_context_user(lws_get_context(wsi)));
+	WebSocketClient* client = reinterpret_cast<WebSocketClient*>(lws_get_opaque_user_data(wsi));
+//	if (client && !client->running_ && client->ready_) {
+//#define $print(x) case (x): Output::Debug("{}: " #x, client->url_); break;
+//		switch (reason) {
+//		$print(LWS_CALLBACK_CLIENT_ESTABLISHED)
+//		$print(LWS_CALLBACK_CLIENT_WRITEABLE)
+//		$print(LWS_CALLBACK_CLIENT_RECEIVE)
+//		$print(LWS_CALLBACK_WS_PEER_INITIATED_CLOSE)
+//		$print(LWS_CALLBACK_CLIENT_CLOSED)
+//		$print(LWS_CALLBACK_CLIENT_CONNECTION_ERROR)
+//		$print(LWS_CALLBACK_EVENT_WAIT_CANCELLED)
+//		$print(LWS_CALLBACK_LOCK_POLL)
+//		$print(LWS_CALLBACK_UNLOCK_POLL)
+//		$print(LWS_CALLBACK_CHANGE_MODE_POLL_FD)
+//		$print(LWS_CALLBACK_DEL_POLL_FD)
+//		default:
+//			Output::Debug("Unknown LWS event {}", (int)reason);
+//		}
+//#undef $print
+//	}
 
 	switch (reason) {
 	case LWS_CALLBACK_CLIENT_ESTABLISHED:
@@ -218,7 +258,8 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 			);
 			bool exit = false;
 			if (close_span.size() >= 2) {
-				int16_t close_reason = static_cast<int16_t>((close_span[0] << 8) | close_span[1]);
+				// close reason in network order (bigendian)
+				int16_t close_reason = ((int16_t)(close_span[1]) << 8) | close_span[0];
 				exit = close_reason == 1028;
 			}
 			client->on_disconnect_(exit, client->userdata_);
@@ -241,27 +282,26 @@ int WebSocketClient::CallbackFunction(struct lws* wsi, enum lws_callback_reasons
 		break;
 
 	case LWS_CALLBACK_EVENT_WAIT_CANCELLED:
-		if (client->ready_) {
-			Output::Warning("{}: event wait cancelled", client->url_);
+		if (client && client->ready_) {
+			Output::Debug("{}: event wait cancelled", client->url_);
 			client->running_.store(false, std::memory_order_release);
+			if (client->on_disconnect_) {
+				client->on_disconnect_(false, client->userdata_);
+			}
 		}
 		break;
 
-	//case LWS_CALLBACK_OPENSSL_PERFORM_SERVER_CERT_VERIFICATION:
-	//	X509_STORE_CTX_set_error((X509_STORE_CTX*)user, X509_V_OK);
+	//case LWS_CALLBACK_LOCK_POLL:
+	//case LWS_CALLBACK_UNLOCK_POLL:
+	//case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
+	//case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
+	//case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+	//case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
 	//	break;
 
-	case LWS_CALLBACK_LOCK_POLL:
-	case LWS_CALLBACK_UNLOCK_POLL:
-	case LWS_CALLBACK_CHANGE_MODE_POLL_FD:
-	case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
-	case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
-	case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
-		break;
-
-	default:
-		Output::Debug("Unhandled LWS event {}", (int)reason);
-		break;
+	//default:
+	//	Output::Debug("Unhandled LWS event {}", (int)reason);
+	//	break;
 	}
 
 	return 0;
@@ -304,12 +344,11 @@ YNOConnection::~YNOConnection() {
 }
 
 void YNOConnection::Open(std::string_view uri) {
+	std::string s {uri};
+#ifdef __EMSCRIPTEN__
 	if (!impl->closed) {
 		Close();
 	}
-
-	std::string s {uri};
-#ifdef __EMSCRIPTEN__
 	EmscriptenWebSocketCreateAttributes ws_attrs = {
 		s.data(),
 		"binary",
@@ -319,10 +358,41 @@ void YNOConnection::Open(std::string_view uri) {
 	impl->closed = false;
 	IMPL::set_callbacks(impl->socket, this);
 #else
-	impl->create_client(s);
-	impl->closed = false;
-	impl->set_callbacks(this);
-	impl->start();
+	if (!impl->_wsclient) {
+		impl->create_client(s);
+		impl->closed = false;
+		impl->set_callbacks(this);
+		impl->start();
+		return;
+	}
+	uv_work_t* task = new uv_work_t{};
+	using work_data_t = std::pair<YNOConnection*, std::string>;
+	task->data = new work_data_t{this, std::move(s)};
+
+	uv_queue_work(uv_default_loop(), task,
+	[](uv_work_t* task) {
+		auto& [self, s] = *static_cast<work_data_t*>(task->data);
+#if defined(_WIN32)
+		if (!self->IsConnected()) return;
+
+		self->Close();
+		bool expected_value = false;
+		if (!WaitOnAddress(self->ConnectedFutex(), &expected_value, sizeof(expected_value), INFINITE))
+			Output::Debug("Failed to wait for previous session to close: {}", GetLastError());
+#else
+#  error TODO: wait on futex
+#endif
+	},
+	[](uv_work_t* task, int) {
+		auto& [self, s] = *static_cast<work_data_t*>(task->data);
+		self->impl->create_client(s);
+		self->impl->closed = false;
+		self->impl->set_callbacks(self);
+		self->impl->start();
+
+		delete (work_data_t*)task->data;
+		delete task;
+	});
 #endif
 }
 
@@ -339,6 +409,7 @@ void YNOConnection::Close() {
 	emscripten_websocket_delete(impl->socket);
 #else
 	// handled by create_client
+	//impl->_wsclient->Stop();
 #endif
 }
 

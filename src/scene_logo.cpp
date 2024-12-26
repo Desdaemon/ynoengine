@@ -135,7 +135,6 @@ bool Scene_Logo::DetectGame() {
 		FileFinder::SetGameFilesystem(fs);
 	}
 
-#ifdef EMSCRIPTEN
 	static bool once = true;
 	if (once) {
 		FileRequestAsync* index = AsyncHandler::RequestFile("index.json");
@@ -148,7 +147,6 @@ bool Scene_Logo::DetectGame() {
 	if (!async_ready) {
 		return false;
 	}
-#endif
 
 	if (FileFinder::IsValidProject(fs) || FileFinder::OpenViewToEasyRpgFile(fs)) {
 		FileFinder::SetGameFilesystem(fs);

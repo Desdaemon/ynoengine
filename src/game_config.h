@@ -66,6 +66,13 @@ namespace ConfigEnum {
 		/** Always overlay */
 		Overlay
 	};
+
+	enum class NametagMode {
+		NONE,
+		CLASSIC,
+		COMPACT,
+		SLIM
+	};
 };
 
 #ifdef HAVE_FLUIDLITE
@@ -150,6 +157,19 @@ struct Game_ConfigInput {
 	void Hide();
 };
 
+struct Game_ConfigOnline {
+	StringConfigParam session_token{ "", "", "Online", "SessionToken" };
+	StringConfigParam username{ "Username", "Your chat name or YNOproject account; max 15 characters", "Online", "Username" };
+	// not persisted
+	StringConfigParam password{ "Password", "Your YNOproject password", "", "" };
+	EnumConfigParam<ConfigEnum::NametagMode, 4> nametag_mode{
+		"Nametags", "Change the nametag display style", "Online", "Nametags", /*default: */ConfigEnum::NametagMode::CLASSIC,
+		Utils::MakeSvArray("None", "Classic", "Compact", "Slim"),
+		Utils::MakeSvArray("none", "classic", "compact", "slim"),
+		Utils::MakeSvArray("Hide nametags", "Same as game text", "Smaller size", "Extra slim")
+	};
+};
+
 struct Game_Config {
 	/** Gameplay subsystem options */
 	Game_ConfigPlayer player;
@@ -162,6 +182,8 @@ struct Game_Config {
 
 	/** Input subsystem options */
 	Game_ConfigInput input;
+
+	Game_ConfigOnline online;
 
 	/**
 	 * Create an application config. This first determines the config file path if any,

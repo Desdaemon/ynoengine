@@ -492,6 +492,10 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/multiplayer/playerother.h
 	src/multiplayer/playerother.cpp
 	src/external/TinySHA1.hpp
+
+	# to be upstreamed
+	src/window_stringinput.h
+	src/window_stringinput.cpp
 )
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
@@ -500,7 +504,12 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 		src/multiplayer/chat_overlay.cpp
 		src/multiplayer/scene_overlay.h
 		src/multiplayer/scene_overlay.cpp
+		src/multiplayer/scene_online.h
+		src/multiplayer/scene_online.cpp
 	)
+	if(WIN32)
+		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress
+	endif()
 endif()
 
 include(CMakeDependentOption)
@@ -1195,8 +1204,8 @@ if(${PLAYER_BUILD_EXECUTABLE} AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL[12]$" 
 
 	if(WIN32)
 		# Open console for Debug builds
-		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
-		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 
 		# Add resources
 		string(REPLACE "." "," RC_VERSION ${PROJECT_VERSION})

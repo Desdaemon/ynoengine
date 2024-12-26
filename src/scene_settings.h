@@ -43,6 +43,8 @@ public:
 	 */
 	Scene_Settings();
 
+	Scene_Settings(Window_Settings::UiMode initial_mode);
+
 	void Start() override;
 	void Refresh() override;
 	void vUpdate() override;
@@ -83,6 +85,7 @@ private:
 	std::unique_ptr<Window_Command_Horizontal> input_mode_window;
 	std::unique_ptr<Window_Command> picker_window;
 	std::unique_ptr<Window_NumberInput> number_window;
+	std::unique_ptr<Window_StringInput> string_window;
 	std::unique_ptr<Window_Help> font_size_window;
 
 	std::unique_ptr<Sprite> title;
