@@ -564,7 +564,8 @@ inline bool Player::IsPatchUnlockPics() {
 }
 
 inline bool Player::HasEasyRpgExtensions() {
-	return game_config.patch_easyrpg.Get();
+	return true;
+	//return game_config.patch_easyrpg.Get();
 }
 
 #ifdef ENABLE_DYNAMIC_INTERPRETER_CONFIG

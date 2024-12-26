@@ -59,6 +59,7 @@ public:
 	void Dispatch(std::string_view name, ParameterList args = ParameterList());
 
 	bool IsConnected() const { return connected; }
+	inline volatile void* ConnectedFutex() { return static_cast<volatile void*>(&connected); }
 
 	virtual ~Connection() = default;
 

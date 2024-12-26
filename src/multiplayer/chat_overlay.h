@@ -21,16 +21,21 @@
 #include <string>
 #include <deque>
 #include <lcf/span.h>
+#include <chrono>
 
 #include "drawable.h"
 #include "bitmap.h"
 #include "memory_management.h"
 #include "async_handler.h"
+#include "game_clock.h"
+#include "input.h"
 
 enum ChatComponents {
 	Box,
 	String,
 	Emoji,
+	// no associated components
+	Header,
 	END
 };
 
@@ -39,24 +44,34 @@ struct ChatComponentsMap { using type = void; };
 
 class ChatOverlay;
 
-class ChatComponent : public Point, public std::enable_shared_from_this<ChatComponent> {
+class ChatComponent : public std::enable_shared_from_this<ChatComponent> {
 protected:
 	const ChatComponents runtime_type;
 	ChatComponent(ChatComponents type = ChatComponents::Box) noexcept :
-		Point(0, 0), runtime_type(type) {}
+		static_dim(0, 0), runtime_type(type) { }
 public:
-	// fields for children classes
+	const Point static_dim;
+	std::function<Point()> sizer;
 
 	ChatComponent(int width, int height, ChatComponents type = ChatComponents::Box) noexcept :
-		Point(width, height), runtime_type(type) {}
-	virtual int Draw(Bitmap& dest) { return x; }
+		static_dim(width, height), runtime_type(type) {}
+	template <typename Sizer>
+	ChatComponent(Sizer&& sizer, ChatComponents type = ChatComponents::Box) noexcept :
+		runtime_type(type), sizer(std::forward<Sizer>(sizer)), static_dim(0, 0) {}
+	virtual Point Draw(Bitmap& dest) { return static_dim; }
 	template <ChatComponents Wanted>
 	typename ChatComponentsMap<Wanted>::type* Downcast();
+	Point GetSize() const;
 };
+
+inline Point ChatComponent::GetSize() const {
+	return sizer ? sizer() : static_dim;
+}
 
 class ChatOverlayMessage {
 public:
-	ChatOverlayMessage(ChatOverlay* parent, std::string text, std::string sender, BitmapRef system, std::string badge);
+	ChatOverlayMessage(
+		ChatOverlay* parent, std::string text, std::string sender, BitmapRef system, std::string badge, bool account);
 	std::string text_orig;
 	std::vector<std::shared_ptr<ChatComponent>> text;
 	std::string sender;
@@ -64,13 +79,18 @@ public:
 	BitmapRef badge;
 	bool hidden = false;
 	ChatOverlay* parent;
+	bool account = false;
 
 	std::vector<std::shared_ptr<ChatComponent>> Convert(ChatOverlay* parent, bool has_badge) const;
+	void SetOnInteract(std::function<void(ChatOverlayMessage&)> on_interact);
 private:
 	FileRequestBinding badge_request;
 
 	void OnBadgeReady(FileRequestResult*);
+	std::function<void(ChatOverlayMessage&)> OnInteract;
 };
+
+inline void ChatOverlayMessage::SetOnInteract(std::function<void(ChatOverlayMessage&)> on_interact) { OnInteract = on_interact; }
 
 class ChatOverlay : public Drawable {
 public:
@@ -78,13 +98,14 @@ public:
 	void Draw(Bitmap& dst) override;
 	void Update();
 	void UpdateScene();
-	void AddMessage(std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "");
+	ChatOverlayMessage& AddMessage(std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "", bool account = true);
 	void OnResolutionChange() override;
 	void SetShowAll(bool show_all);
 	inline void SetShowAll() { SetShowAll(!show_all); }
 	inline bool ShowingAll() const noexcept { return show_all;  }
 	void DoScroll(int increase);
 	void MarkDirty() noexcept;
+	void AddSystemMessage(StringView string);
 private:
 	bool IsAnyMessageVisible() const;
 
@@ -102,16 +123,38 @@ private:
 	std::string input;
 
 	std::deque<ChatOverlayMessage> messages;
+
+	struct KeyTimer {
+	public:
+		const Input::Keys::InputKey raw_key;
+		const std::chrono::milliseconds delay;
+		const std::chrono::milliseconds rate;
+		Game_Clock::time_point last_triggered;
+		Game_Clock::time_point last_repeated;
+	};
+
+	enum class CustomKeyTimers : char {
+		backspace,
+		END,
+	};
+	std::array<KeyTimer, (int)CustomKeyTimers::END> key_timers {
+		{Input::Keys::BACKSPACE, std::chrono::milliseconds{300}, std::chrono::milliseconds{24}}
+	};
+
+	bool IsTriggeredOrRepeating(CustomKeyTimers key);
 };
 
 inline void ChatOverlay::MarkDirty() noexcept { dirty = true; }
 
 class ChatString : public ChatComponent {
+	constexpr static Color default_color = Color(200, 200, 200, 255);
 public:
 	StringView string;
+	Color color;
 
-	ChatString(StringView other) : ChatComponent(0, 0, ChatComponents::String), string(other) {}
-	int Draw(Bitmap& dst) override;
+	ChatString(StringView other, Color color = default_color) : ChatComponent(0, 0, ChatComponents::String),
+		string(other), color(color) {}
+	//Point Draw(Bitmap& dst) override;
 };
 
 class ChatEmoji : public ChatComponent {
@@ -122,7 +165,7 @@ public:
 	FileRequestBinding request = nullptr;
 
 	ChatEmoji(ChatOverlay* parent, int width, int height, std::string emoji);
-	int Draw(Bitmap& dest) override;
+	//Point Draw(Bitmap& dest) override;
 	void RequestBitmap(ChatOverlay* parent);
 };
 
@@ -145,6 +188,8 @@ template<>
 struct ChatComponentsMap<ChatComponents::String> { using type = ChatString; };
 template<>
 struct ChatComponentsMap<ChatComponents::Emoji> { using type = ChatEmoji; };
+template<>
+struct ChatComponentsMap<ChatComponents::Header> { using type = ChatComponent; };
 
 template<ChatComponents Wanted>
 inline typename ChatComponentsMap<Wanted>::type* ChatComponent::Downcast() {

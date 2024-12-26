@@ -15,40 +15,18 @@
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EP_WINDOW_INPUT_SETTINGS_H
-#define EP_WINDOW_INPUT_SETTINGS_H
+#ifndef EP_WINDOW_STRINGINPUT_H
+#define EP_WINDOW_STRINGINPUT_H
 
-// Headers
-#include <vector>
-#include "input.h"
-#include "input_buttons.h"
-#include "window_numberinput.h"
 #include "window_selectable.h"
-#include "window_stringinput.h"
 
-/**
- * Window_InputSettings class.
- */
-class Window_InputSettings : public Window_Selectable {
+class Window_StringInput : public Window_Selectable {
 public:
-	static constexpr int mapping_limit = 16;
+	Window_StringInput(StringView initial_value, int ix, int iy, int iwidth = 320, int iheight = 80);
 
-	/** Constructor  */
-	Window_InputSettings(int ix, int iy, int iwidth, int iheight);
-
-	Input::InputButton GetInputButton() const;
-	void SetInputButton(Input::InputButton button);
-
-	bool RemoveMapping();
-	void ResetMapping();
-
-	/**
-	 * Refreshes the item list.
-	 */
 	void Refresh();
-
-private:
-	Input::InputButton button = Input::InputButton::BUTTON_COUNT;
+	void Update() override;
+	std::string value;
 };
 
 #endif

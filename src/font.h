@@ -27,6 +27,7 @@
 #include "string_view.h"
 #include <string>
 #include <lcf/scope_guard.h>
+#include <stddef.h>
 
 class Color;
 class Rect;
@@ -260,6 +261,7 @@ class Font {
 	virtual bool vCanShape() const { return false; }
 	virtual std::vector<ShapeRet> vShape(std::u32string_view) const { return {}; }
 	virtual void vApplyStyle(const Style& style) { (void)style; };
+	inline double GetScaleRatio() const { return current_style.size / (double)original_style.size; }
 
  protected:
 	Font(std::string_view name, int size, bool bold, bool italic);

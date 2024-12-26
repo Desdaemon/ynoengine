@@ -36,6 +36,10 @@
 #include "bitmap.h"
 #include "feature.h"
 
+#ifdef PLAYER_YNO
+#  include "multiplayer/scene_online.h"
+#endif
+
 constexpr int menu_command_width = 88;
 constexpr int gold_window_width = 88;
 constexpr int gold_window_height = 32;
@@ -89,6 +93,9 @@ void Scene_Menu::CreateCommandWindow() {
 		if (Player::debug_flag) {
 			command_options.push_back(Debug);
 		}
+#ifdef PLAYER_YNO
+		command_options.push_back(Online);
+#endif
 		command_options.push_back(Quit);
 	} else {
 		for (std::vector<int16_t>::iterator it = lcf::Data::system.menu_commands.begin();
@@ -115,6 +122,9 @@ void Scene_Menu::CreateCommandWindow() {
 		if (Player::debug_flag) {
 			command_options.push_back(Debug);
 		}
+#ifdef PLAYER_YNO
+		command_options.push_back(Online);
+#endif
 		command_options.push_back(Quit);
 	}
 
@@ -151,6 +161,9 @@ void Scene_Menu::CreateCommandWindow() {
 			break;
 		case Debug:
 			options.push_back("Debug");
+			break;
+		case Online:
+			options.push_back("Online");
 			break;
 		default:
 			options.push_back(ToString(lcf::Data::terms.menu_quit));
@@ -249,6 +262,12 @@ void Scene_Menu::UpdateCommand() {
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
 			Scene::Push(std::make_shared<Scene_Debug>());
 			break;
+#ifdef PLAYER_YNO
+		case Online:
+			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
+			Scene::Push(std::make_shared<Scene_Settings>(Window_Settings::eOnlineAccount));
+			break;
+#endif
 		case Quit:
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
 			Scene::Push(std::make_shared<Scene_End>());

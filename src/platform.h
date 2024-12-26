@@ -89,6 +89,9 @@ namespace Platform {
 		/** @return Filesize or -1 on error */
 		int64_t GetSize() const;
 
+		/** Gets the Unix timestamp since last write or -1 on fail */
+		int64_t GetLastModified() const;
+
 		/**
 		 * Creates a directory recursively at the filename path.
 		 * @param follow_symlinks Whether to follow symlinks (if supported on this platform)
