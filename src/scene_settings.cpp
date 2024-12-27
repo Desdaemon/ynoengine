@@ -273,7 +273,7 @@ void Scene_Settings::vUpdate() {
 		help_window2->SetFont(nullptr);
 		options_window->Pop();
 		if (mode == Window_Settings::eOnlineAccount) {
-			SaveConfig(false);
+			SaveConfig(true);
 		}
 		SetMode(options_window->GetMode());
 		if (mode == Window_Settings::eNone) {

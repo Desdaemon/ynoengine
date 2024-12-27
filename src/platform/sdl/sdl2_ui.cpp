@@ -454,7 +454,7 @@ bool Sdl2Ui::RefreshDisplayMode() {
 #ifdef PLAYER_YNO
 		webview_thread = std::thread([hwnd, this] {
 			try {
-				webview = std::make_unique<webview::webview>(true, nullptr);
+				webview = std::make_unique<webview::webview>(false, nullptr);
 				auto& w = *webview;
 				w.set_title("YNOproject sidecar");
 				w.set_size(window.width, window.height, WEBVIEW_HINT_NONE);
@@ -463,15 +463,16 @@ bool Sdl2Ui::RefreshDisplayMode() {
 #ifdef _WIN32
 					HWND childHwnd = (HWND)widget.value();
 					SetParent(childHwnd, hwnd);
-					SetWindowLongPtr(childHwnd, GWLP_HWNDPARENT, (long long)hwnd);
-					SetWindowLongPtr(childHwnd, GWL_STYLE, WS_OVERLAPPED | WS_CHILD);
-					//RECT rect{ 0, 0, window.width, window.height };
-					//AdjustWindowRectEx(&rect, WS_OVERLAPPED | WS_CHILD, false, 0);
-					//SetWindowPos(childHwnd, nullptr,
-					//	0, 0,
-					//	rect.right - rect.left,
-					//	rect.bottom - rect.top,
-					//	SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+					//auto styles = GetWindowLongPtr(childHwnd, GWL_STYLE);
+					auto styles = GW_CHILD;
+					SetWindowLongPtr(childHwnd, GWL_STYLE, styles);
+					RECT rect{ 0, 0, 800, window.height };
+					AdjustWindowRectEx(&rect, styles, false, 0);
+					SetWindowPos(childHwnd, nullptr,
+						window.width - 800, 0,
+						rect.right - rect.left,
+						rect.bottom - rect.top,
+						SWP_FRAMECHANGED | SWP_HIDEWINDOW);
 #else
 #  error TODO: implement adopting webview as child
 #endif
@@ -510,8 +511,6 @@ bool Sdl2Ui::RefreshDisplayMode() {
 	// Not using the enum names because this will fail to build when not using a recent Windows 11 SDK
 	int window_rounding = 1; // DWMWCP_DONOTROUND
 	DwmSetWindowAttribute(window, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
-	auto styles = GetWindowLongPtr(hwnd, GWL_STYLE);
-	SetWindowLongPtr(hwnd, GWL_STYLE, styles | WS_CLIPCHILDREN);
 #endif
 
 	uint32_t sdl_pixel_fmt = GetDefaultFormat();
@@ -712,7 +711,7 @@ void Sdl2Ui::UpdateDisplay() {
 			viewport.y = border_y;
 			viewport.h = win_height;
 			viewport.w = static_cast<int>(ceilf(main_surface->width() * window.scale));
-			viewport.x = (win_width - viewport.w - 480) / 2 + border_x;
+			viewport.x = (win_width - viewport.w) / 2 + border_x;
 			do_stretch();
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
@@ -721,10 +720,9 @@ void Sdl2Ui::UpdateDisplay() {
 #ifdef _WIN32
 			HWND hwnd = (HWND&)webview->window();
 
-			RECT rect{ 0, 0, 480, window.height };
-			AdjustWindowRectEx(&rect, WS_OVERLAPPED | WS_CHILD, false, 0);
+			RECT rect{ 0, 0, 800, window.height };
 			SetWindowPos(hwnd, nullptr,
-				window.width - 480, 0,
+				window.width - 800, 0,
 				rect.right - rect.left,
 				rect.bottom - rect.top,
 				SWP_FRAMECHANGED | SWP_SHOWWINDOW);
