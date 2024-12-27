@@ -272,6 +272,9 @@ void Scene_Settings::vUpdate() {
 
 		help_window2->SetFont(nullptr);
 		options_window->Pop();
+		if (mode == Window_Settings::eOnlineAccount) {
+			SaveConfig(false);
+		}
 		SetMode(options_window->GetMode());
 		if (mode == Window_Settings::eNone) {
 			Scene::Pop();
@@ -452,6 +455,7 @@ void Scene_Settings::UpdateOptions() {
 				string_window->SetZ(options_window->GetZ() + 1);
 				string_window->SetOpacity(255);
 				string_window->SetActive(true);
+				string_window->SetSecret(option.secret);
 				options_window->SetActive(false);
 			}
 		} else {

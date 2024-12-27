@@ -27,6 +27,10 @@
 #include <array>
 #include <SDL.h>
 
+#ifdef PLAYER_YNO
+#  include <webview/webview.h>
+#endif
+
 extern "C" {
 	union SDL_Event;
 	struct SDL_Texture;
@@ -79,6 +83,10 @@ public:
 	AudioInterface& GetAudio() override;
 #endif
 
+	/** begin populating Input::text_input and Input::composition */
+	void BeginTextCapture() override;
+	void EndTextCapture() override;
+
 	/** @} */
 
 private:
@@ -110,6 +118,7 @@ private:
 	void ProcessControllerButtonEvent(SDL_Event &evnt);
 	void ProcessControllerAxisEvent(SDL_Event &evnt);
 	void ProcessFingerEvent(SDL_Event & evnt);
+	void ProcessTextEditEvent(SDL_Event& evnt);
 
 	/** @} */
 
@@ -150,6 +159,9 @@ private:
 #ifdef SUPPORT_AUDIO
 	std::unique_ptr<AudioInterface> audio_;
 #endif
+
+	std::unique_ptr<webview::webview> webview;
+	std::thread webview_thread;
 };
 
 #endif
