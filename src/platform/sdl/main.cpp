@@ -81,7 +81,7 @@ extern "C" int main(int argc, char* argv[]) {
 	EpAndroid::env = (JNIEnv*)SDL_AndroidGetJNIEnv();
 #endif
 
-	//Output::SetLogLevel(LogLevel::Debug);
+	Output::SetLogLevel(LogLevel::Debug);
 	Player::Init(std::move(args));
 	Player::Run();
 

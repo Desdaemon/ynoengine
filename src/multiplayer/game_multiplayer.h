@@ -87,7 +87,7 @@ public:
 		bool account = true;
 		bool global = true;
 	};
-	std::function<void(ChatMsg)> on_chat_msg;
+	//std::function<void(ChatMsg)> on_chat_msg;
 	std::function<void(std::string_view system)> on_system_graphic_change;
 	std::string lastmsgid;
 	std::map<std::string/*uuid*/, PlayerData> playerdata;

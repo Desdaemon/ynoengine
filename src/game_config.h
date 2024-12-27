@@ -145,8 +145,6 @@ struct Game_ConfigVideo {
 	ConfigParam<int> window_width{ "", "", "Video", "WindowWidth", -1 };
 	ConfigParam<int> window_height{ "", "", "Video", "WindowHeight", -1 };
 
-	void* foreign_window_handle = nullptr;
-
 	void Hide();
 };
 
@@ -175,9 +173,9 @@ struct Game_ConfigInput {
 
 struct Game_ConfigOnline {
 	StringConfigParam session_token{ "", "", "Online", "SessionToken" };
-	StringConfigParam username{ "Username", "Your chat name or YNOproject account; max 15 characters", "Online", "Username" };
+	StringConfigParam username{ "Username", "Chat nickname or YNOproject account; max 12 characters", "Online", "Username" };
 	// not persisted
-	StringConfigParam password{ "Password", "Your YNOproject password", "", "" };
+	StringConfigParam password{ "Password", "YNOproject password", "", "", "", true };
 	EnumConfigParam<ConfigEnum::NametagMode, 4> nametag_mode{
 		"Nametags", "Change the nametag display style", "Online", "Nametags", /*default: */ConfigEnum::NametagMode::CLASSIC,
 		Utils::MakeSvArray("None", "Classic", "Compact", "Slim"),

@@ -14,6 +14,7 @@ include(PlayerBuildType)
 include(PlayerMisc)
 include(GetGitRevisionDescription)
 include(CheckCSourceCompiles)
+include(FetchContent)
 
 # Dependencies provided by CMake Presets
 option(PLAYER_FIND_ROOT_PATH_APPEND "When enabled the items from CMAKE_PREFIX_PATH are added to CMAKE_FIND_ROOT_PATH. Works around problematic CMake Toolchain files" OFF)
@@ -620,8 +621,16 @@ if(${PLAYER_SHELL} STREQUAL "yno")
 	set(PLAYER_YNO TRUE)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_YNO)
 
-	player_find_package(NAME wxWidgets REQUIRED)
-	target_link_libraries(${PROJECT_NAME} wx::core wx::base)
+	#player_find_package(NAME wxWidgets REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} wx::core wx::base)
+	#find_package(unofficial-webview2 CONFIG REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} unofficial::webview2::webview2)
+	FetchContent_Declare(webview
+		GIT_REPOSITORY https://github.com/webview/webview
+		GIT_TAG 0.12.0)
+	FetchContent_MakeAvailable(webview)
+	target_link_libraries(${PROJECT_NAME} webview::core)
+
 elseif(${PLAYER_SHELL} STREQUAL "none")
 	# do nothing
 else()
@@ -667,7 +676,8 @@ elseif(PLAYER_TARGET_PLATFORM STREQUAL "SDL2")
 		TARGET SDL2::SDL2
 		REQUIRED)
 
-	if(TARGET SDL2::SDL2main AND ${PLAYER_SHELL} STREQUAL "none")
+	if(TARGET SDL2::SDL2main #AND ${PLAYER_SHELL} STREQUAL "none"
+	)
 		target_link_libraries(${PROJECT_NAME} SDL2::SDL2main)
 	endif()
 
@@ -1258,8 +1268,8 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set(EXE_NAME ${PROJECT_NAME}_exe)
 		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 			add_executable(${EXE_NAME} "src/platform/emscripten/main.cpp")
-		elseif(PLAYER_YNO)	
-			add_executable(${EXE_NAME} "src/platform/ynoshell/main.cpp")
+		#elseif(PLAYER_YNO)	
+			#add_executable(${EXE_NAME} "src/platform/ynoshell/main.cpp")
 		else()
 			add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")
 		endif()
