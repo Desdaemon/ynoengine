@@ -158,6 +158,8 @@ public:
 
 	Game_ConfigOnline& GetConfig() noexcept;
 	void SetConfig(const Game_ConfigOnline& cfg);
+	void SyncSaveFile() const;
+	void UploadSaveFile() const;
 	std::string GetSessionEndpoint() const;
 	/** Logs the player out if the session token is no longer valid  */
 	void CheckLogin(bool async = true);
