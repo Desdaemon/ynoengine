@@ -22,6 +22,7 @@
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 #include <chrono>
+
 using json = nlohmann::json;
 
 #include "chat_overlay.h"
@@ -36,6 +37,7 @@ using json = nlohmann::json;
 #include "multiplayer/game_multiplayer.h"
 #include "multiplayer/scene_overlay.h"
 #include "messages.h"
+#include "input.h"
 
 namespace {
 	bool LargeScreen() {
@@ -141,12 +143,14 @@ void ChatOverlay::Draw(Bitmap& dst) {
 		int y = y_end - (lidx + 1) * text_height;
 		bitmap->Blit(0, y, *black, black->GetRect(), 200);
 		if (GMI().CanChat()) {
-			int prompt_width = Text::Draw(*bitmap, offset, y, font, offwhite, ">").x;
+			int prompt_width = 0;
+			prompt_width = Text::Draw(*bitmap, offset, y, font, offwhite, ">").x;
 			offset += prompt_width;
-			if (!input.empty())
-				offset += Text::Draw(*bitmap, offset, y, font, offwhite, input).x;
+			for (const auto& ch : input)
+				offset += Text::Draw(*bitmap, offset, y, font, offwhite, ch, false).x;
 			// cursor
 			bitmap->FillRect({ offset, y + text_height - 3, prompt_width, 3 }, offwhite);
+			offset += Input::RenderTextComposition(*bitmap, offset, y, &font);
 		}
 		else {
 			Text::Draw(*bitmap, offset, y, font, Color(160, 160, 160, 255),
@@ -329,47 +333,26 @@ void ChatOverlay::UpdateScene() {
 	}
 
 	if (!GMI().CanChat()) return;
+
 	// chat input only below this point
 
-	constexpr int offset = U'A' - Input::Keys::A;
-	constexpr int uppercase = U'a' - U'A';
-	bool shift = Input::IsRawKeyPressed(Input::Keys::LSHIFT) || Input::IsRawKeyPressed(Input::Keys::RSHIFT);
-	static std::map<Input::Keys::InputKey, char> symbols{
-		{Input::Keys::N0, '0'},
-		{Input::Keys::N1, '1'},
-		{Input::Keys::N2, '2'},
-		{Input::Keys::N3, '3'},
-		{Input::Keys::N4, '4'},
-		{Input::Keys::N5, '5'},
-		{Input::Keys::N6, '6'},
-		{Input::Keys::N7, '7'},
-		{Input::Keys::N8, '8'},
-		{Input::Keys::N9, '9'},
-		{Input::Keys::SPACE, ' '},
-		//{Input::Keys::SEMICOLON, ';'},
-	};
-	for (int letter = Input::Keys::A; letter <= Input::Keys::Z; ++letter) {
-		if (Input::IsRawKeyTriggered((Input::Keys::InputKey)letter)) {
-			input.push_back(letter + offset + (shift ? 0 : uppercase));
-			dirty = true;
-		}
+	StringView ui_input(Input::text_input.data());
+	if (!ui_input.empty()) {
+		input.append(Utils::DecodeUTF32(ui_input));
+		dirty = true;
+		Input::text_input.clear();
 	}
-	if (Input::IsRawKeyTriggered(Input::Keys::SEMICOLON)) {
-		input.push_back(shift ? ':' : ';');
+	else if (Input::composition.active) {
 		dirty = true;
 	}
-	for (auto& [key, chara] : symbols) {
-		if (Input::IsRawKeyTriggered(key)) {
-			input.push_back(chara);
-			dirty = true;
-		}
-	}
+
 	if (IsTriggeredOrRepeating(CustomKeyTimers::backspace) && !input.empty()) {
 		input.pop_back();
 		dirty = true;
 	}
 	if (Input::IsRawKeyTriggered(Input::Keys::RETURN) && !input.empty()) {
-		GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionGSay>(input);
+		std::string encoded = Utils::EncodeUTF(input);
+		GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionGSay>(std::move(encoded));
 		input.clear();
 		dirty = true;
 	}
@@ -387,10 +370,14 @@ void ChatOverlay::SetShowAll(bool show_all) {
 			((Scene_Overlay*)Scene::instance.get())->SetOnUpdate([this] { UpdateScene(); });
 		else
 			Scene::Push(std::make_shared<Scene_Overlay>([this] { UpdateScene(); }));
+		DisplayUi->BeginTextCapture();
 	}
+	else
+		DisplayUi->EndTextCapture();
 }
 
 void ChatOverlay::DoScroll(int increase) {
+	if (messages.empty()) return;
 	scroll += increase;
 	scroll = (scroll + messages.size()) % messages.size();
 	counter = 0;

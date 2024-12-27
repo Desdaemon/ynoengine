@@ -120,7 +120,7 @@ private:
 	int scroll = 0;
 
 	BitmapRef bitmap, black, grey, scrollbar;
-	std::string input;
+	std::u32string input;
 
 	std::deque<ChatOverlayMessage> messages;
 

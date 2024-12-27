@@ -515,50 +515,44 @@ void Game_Multiplayer::InitConnection() {
 			Connect(room_id);
 
 		// sync chat messages
-		if (on_chat_msg) {
-			std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMsgId={}", 200, 100, lastmsgid);
-			cpr::Response resp = cpr::Get(cpr::Url{endpoint});
-			if (resp.status_code >= 200 && resp.status_code < 300) {
-				json chatmsgs = json::parse(resp.text);
-				for (auto& it : chatmsgs["players"]) {
-					auto& entry = playerdata[(std::string)it["uuid"]];
-					entry.name = it["name"];
-					entry.systemName = it["systemName"];
-					entry.rank = it["rank"];
-					entry.account = it["account"];
-					entry.badge = it["badge"];
-				}
+		std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMsgId={}", 200, 100, lastmsgid); cpr::Response resp = cpr::Get(cpr::Url{endpoint});
+		if (resp.status_code >= 200 && resp.status_code < 300) {
+			json chatmsgs = json::parse(resp.text);
+			for (auto& it : chatmsgs["players"]) {
+				auto& entry = playerdata[(std::string)it["uuid"]];
+				entry.name = it["name"];
+				entry.systemName = it["systemName"];
+				entry.rank = it["rank"];
+				entry.account = it["account"];
+				entry.badge = it["badge"];
+			}
 
-				const auto& messages = chatmsgs["messages"];
-				for (auto it = messages.begin(); it != messages.end(); ++it) {
-					std::string name = "Unknown Player";
-					std::string system;
-					std::string badge;
-					bool account = false;
-					if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
-						name = player->second.name;
-						system = player->second.systemName;
-						badge = player->second.badge;
-						account = player->second.account;
-					}
-					std::string contents((*it)["contents"]);
-					on_chat_msg({
-						contents, name, system, badge,
-						/*syncing: */std::next(it) != messages.end(),
-						account,
-					});
-					lastmsgid = (std::string)(*it)["msgId"];
+			const auto& messages = chatmsgs["messages"];
+			auto& chatoverlay = Graphics::GetChatOverlay();
+			for (auto it = messages.begin(); it != messages.end(); ++it) {
+				std::string name = "Unknown Player";
+				std::string system;
+				std::string badge;
+				bool account = false;
+				if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
+					name = player->second.name;
+					system = player->second.systemName;
+					badge = player->second.badge;
+					account = player->second.account;
 				}
-				if (!username.empty()) {
-					if (session_token.empty())
-						Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as <{}>.", username));
-					else
-						Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as [{}].", username));
-				}
-				else {
-					Graphics::GetChatOverlay().AddSystemMessage(
-						"Welcome to YNOproject! To join the chat, first set your name in the Online settings.");
-				}
+				std::string contents((*it)["contents"]);
+				chatoverlay.AddMessage(contents, name, system, badge, account);
+				lastmsgid = (std::string)(*it)["msgId"];
+			}
+			if (!username.empty()) {
+				if (session_token.empty())
+					Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as <{}>.", username));
+				else
+					Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as [{}].", username));
+			}
+			else {
+				Graphics::GetChatOverlay().AddSystemMessage(
+					"Welcome to YNOproject! To join the chat, first set your name in the Online settings.");
 			}
 		}
 	});
@@ -578,10 +572,8 @@ void Game_Multiplayer::InitConnection() {
 			account = player->second.account;
 		}
 		Output::Debug("(gc) {}: {}", name, p.msg);
-		if (on_chat_msg) {
-			on_chat_msg({ p.msg, name, system, badge, account });
-			lastmsgid = p.msgid;
-		}
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account);
+		lastmsgid = p.msgid;
 	});
 	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
 		std::string name = "Unknown Player";
@@ -596,9 +588,7 @@ void Game_Multiplayer::InitConnection() {
 			account = player->second.account;
 		}
 		Output::Debug("(mc) {}: {}", name, p.msg);
-		if (on_chat_msg) {
-			on_chat_msg({ p.msg, name, system, badge, account, /*global: */false });
-		}
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account);
 	});
 	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
 		auto& player = playerdata[p.uuid];
@@ -1100,7 +1090,7 @@ void Game_Multiplayer::CheckLoginCallback(cpr::Response resp) {
 	else {
 		username = (std::string)body["name"];
 		cfg.username.Set(username);
-		Output::Debug("username: {}", username);
+		Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Username set to {}.", username));
 	}
 	Graphics::GetChatOverlay().MarkDirty();
 }
@@ -1116,6 +1106,7 @@ void Game_Multiplayer::Login(std::string_view username, std::string_view passwor
 	if (resp.status_code >= 200 && resp.status_code < 300) {
 		login_failure.clear();
 		session_token = resp.text;
+		this->username = username;
 		cfg.session_token.Set(session_token);
 		CheckLogin(false);
 		ReconnectSession();
@@ -1128,7 +1119,9 @@ void Game_Multiplayer::Login(std::string_view username, std::string_view passwor
 
 void Game_Multiplayer::Logout() {
 	session_token.clear();
+	username.clear();
 	cfg.session_token.Set("");
+	cfg.username.Set("");
 	ReconnectSession();
 }
 
@@ -1160,4 +1153,5 @@ void Game_Multiplayer::SetNickname(StringView name) {
 	username = value;
 	cfg.username.Set(value);
 	Graphics::GetChatOverlay().MarkDirty();
+	CheckLogin();
 }

@@ -265,6 +265,10 @@ public:
 	 */
 	Game_ConfigVideo GetConfig() const;
 
+	/** Enables receiving input from IME. Meant to be paired with EndTextCapture. */
+	virtual void BeginTextCapture() {}
+	virtual void EndTextCapture() {}
+
 protected:
 	/**
 	 * Protected Constructor. Use CreateUi instead.

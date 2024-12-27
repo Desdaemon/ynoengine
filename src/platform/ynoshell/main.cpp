@@ -11,10 +11,13 @@
 #include "multiplayer/chat_overlay.h"
 #include "multiplayer/game_multiplayer.h"
 
+class YnoFrame;
+
 class YnoApp : public wxApp
 {
 public:
 	bool OnInit() override;
+	YnoFrame* frame;
 };
 
 //wxIMPLEMENT_APP(YnoApp);
@@ -65,21 +68,22 @@ public:
 
 private:
 	void OnKeyDownFrame(wxKeyEvent& event);
+	void OnFocus(wxActivateEvent& event);
 };
 
 
 bool YnoApp::OnInit()
 {
-	YnoFrame* frame = new YnoFrame();
+	frame = new YnoFrame();
 	frame->Show(true);
 
-	wxWindow* child = frame->gameWindow;
+	YnoGameContainer* child = frame->gameWindow;
 	if (!child) {
 		Output::Error("no child frame");
 		return false;
 	}
 
-	Player::did_parse_config = [handle=child->GetHandle()](Game_Config& cfg) {
+	Player::did_parse_config = [handle=child->GetHWND()](Game_Config& cfg) {
 		cfg.video.foreign_window_handle = (void*)handle;
 	};
 
@@ -88,7 +92,7 @@ bool YnoApp::OnInit()
 	Player::Init(std::move(args));
 	Player::Run();
 
-	return true;
+	exit(Player::exit_code);
 }
 
 YnoFrame::YnoFrame()
@@ -96,7 +100,7 @@ YnoFrame::YnoFrame()
 {
 	wxBoxSizer* sizer = new wxBoxSizer(wxHORIZONTAL);
 
-	gameWindow = new YnoGameContainer(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE);
+	gameWindow = new YnoGameContainer(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxFULL_REPAINT_ON_RESIZE | wxWANTS_CHARS);
 	gameWindow->Bind(wxEVT_KEY_DOWN, &YnoFrame::OnKeyDownFrame, this);
 	sizer->Add((wxWindow*)gameWindow, 1, wxEXPAND);
 
@@ -104,8 +108,14 @@ YnoFrame::YnoFrame()
 		Graphics::GetChatOverlay().AddMessage(msg.content, msg.sender, msg.system, msg.badge, msg.account);
 	};
 
+	Bind(wxEVT_ACTIVATE, &YnoFrame::OnFocus, this);
+
 	SetSizer(sizer);
 };
+
+void YnoFrame::OnFocus(wxActivateEvent& event) {
+	event.Skip();
+}
 
 void YnoFrame::OnKeyDownFrame(wxKeyEvent& event) {
 	switch (event.GetKeyCode()) {

@@ -23,10 +23,15 @@
 class Window_StringInput : public Window_Selectable {
 public:
 	Window_StringInput(StringView initial_value, int ix, int iy, int iwidth = 320, int iheight = 80);
+	~Window_StringInput();
 
 	void Refresh();
 	void Update() override;
 	std::string value;
+
+	void SetSecret(bool secret);
+private:
+	bool secret;
 };
 
 #endif
