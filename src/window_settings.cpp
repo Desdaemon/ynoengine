@@ -18,6 +18,7 @@
 // Headers
 #include <sstream>
 #include <utility>
+#include <algorithm>
 #include "game_map.h"
 #include "input.h"
 #include "text.h"
@@ -65,7 +66,12 @@ void Window_Settings::DrawOption(int index) {
 	Font::SystemColor color = enabled ? option.color : Font::ColorDisabled;
 
 	contents->TextDraw(rect, color, option.text);
-	contents->TextDraw(rect, color, option.value_text, Text::AlignRight);
+	if (!option.secret)
+		contents->TextDraw(rect, color, option.value_text, Text::AlignRight);
+	else {
+		std::string value(std::min((size_t)10, option.value_text.size()), '*');
+		contents->TextDraw(rect, color, value, Text::AlignRight);
+	}
 }
 
 Window_Settings::StackFrame& Window_Settings::GetFrame(int n) {
@@ -288,6 +294,7 @@ void Window_Settings::AddOption(const StringConfigParam& param, Action&& action)
 	opt.help = ToString(param.GetDescription());
 	opt.value_text = param.Get();
 	opt.mode = eOptionStringInput;
+	opt.secret = param.secret;
 	if (!param.IsLocked())
 		opt.action = std::forward<Action>(action);
 	GetFrame().options.push_back(std::move(opt));
@@ -769,10 +776,9 @@ void Window_Settings::RefreshOnline() {
 		
 		AddOption(cfg.username, [this, &cfg] {
 			auto& value = GetCurrentOption().value_text;
-			cfg.username.Set(value);
 			if (!value.empty() && GMI().sessionConn.IsConnected() && Input::IsRawKeyTriggered(Input::Keys::RETURN)) {
+				cfg.username.Set(value);
 				GMI().SetNickname(value);
-				//Output::Debug("set: {}", value);
 			}
 		});
 		AddOption(cfg.password, [this, &cfg] {

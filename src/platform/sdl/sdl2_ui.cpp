@@ -232,6 +232,10 @@ Sdl2Ui::~Sdl2Ui() {
 	audio_.reset();
 #endif
 
+	if (webview) {
+		webview->terminate();
+		webview_thread.join();
+	}
 	SDL_Quit();
 }
 
@@ -356,9 +360,6 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		#endif
 
 		// Create our window
-		if (vcfg.foreign_window_handle) {
-			sdl_window = SDL_CreateWindowFrom(vcfg.foreign_window_handle);
-		} else
 		if (vcfg.window_x.Get() < 0 || vcfg.window_y.Get() < 0 || vcfg.window_height.Get() <= 0 || vcfg.window_width.Get() <= 0) {
 			sdl_window = SDL_CreateWindow(GAME_TITLE,
 				SDL_WINDOWPOS_CENTERED,
@@ -444,30 +445,62 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		}
 
 #ifdef _WIN32
-		HWND window = GetWindowHandle(sdl_window);
+		HWND hwnd = GetWindowHandle(sdl_window);
 		// Not using the enum names because this will fail to build when not using a recent Windows 11 SDK
 		int window_rounding = 1; // DWMWCP_DONOTROUND
-		DwmSetWindowAttribute(window, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
+		DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
+		auto styles = GetWindowLongPtr(hwnd, GWL_STYLE);
+		SetWindowLongPtr(hwnd, GWL_STYLE, styles | WS_CLIPCHILDREN);
 #endif
 
 		renderer_sg.Dismiss();
 		window_sg.Dismiss();
+#ifdef PLAYER_YNO
+		webview_thread = std::thread([hwnd, this] {
+			try {
+				webview = std::make_unique<webview::webview>(true, nullptr);
+				auto& w = *webview;
+				w.set_title("YNOproject sidecar");
+				w.set_size(window.width, window.height, WEBVIEW_HINT_NONE);
+				w.set_html(R"html(<head><meta http-equiv=refresh content="0;url=https://ynoproject.net"></head>)html");
+				if (auto widget = w.window(); widget.ok()) {
+#ifdef _WIN32
+					HWND childHwnd = (HWND)widget.value();
+					SetParent(childHwnd, hwnd);
+					SetWindowLongPtr(childHwnd, GWLP_HWNDPARENT, (long long)hwnd);
+					SetWindowLongPtr(childHwnd, GWL_STYLE, WS_OVERLAPPED | WS_CHILD);
+					//RECT rect{ 0, 0, window.width, window.height };
+					//AdjustWindowRectEx(&rect, WS_OVERLAPPED | WS_CHILD, false, 0);
+					//SetWindowPos(childHwnd, nullptr,
+					//	0, 0,
+					//	rect.right - rect.left,
+					//	rect.bottom - rect.top,
+					//	SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+#else
+#  error TODO: implement adopting webview as child
+#endif
+				}
+				w.run();
+			}
+			catch (const webview::exception& err) {
+				Output::Error("webview died: {}", (int)err.error().code());
+			}
+		});
+#endif
 	} else {
 		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
 #ifndef EMSCRIPTEN
-		if (!vcfg.foreign_window_handle) {
-			bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
-			if (is_fullscreen) {
-				SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+		bool is_fullscreen = (flags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
+		if (is_fullscreen) {
+			SDL_SetWindowFullscreen(sdl_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+		} else {
+			SDL_SetWindowFullscreen(sdl_window, 0);
+			if ((last_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+					== SDL_WINDOW_FULLSCREEN_DESKTOP) {
+				// Restore to pre-fullscreen size
+				SDL_SetWindowSize(sdl_window, 0, 0);
 			} else {
-				SDL_SetWindowFullscreen(sdl_window, 0);
-				if ((last_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
-						== SDL_WINDOW_FULLSCREEN_DESKTOP) {
-					// Restore to pre-fullscreen size
-					SDL_SetWindowSize(sdl_window, 0, 0);
-				} else {
-					SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
-				}
+				SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
 			}
 		}
 #endif
@@ -673,12 +706,23 @@ void Sdl2Ui::UpdateDisplay() {
 			viewport.y = 0;
 			viewport.h = window.height;
 			viewport.w = static_cast<int>(ceilf(main_surface->width() * window.scale));
-			viewport.x = (window.width - viewport.w) / 2;
+			viewport.x = (window.width - viewport.w - 480) / 2;
 			do_stretch();
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
 
-		// TODO: Remove the division by 2 to render at actual size
+		if (webview) {
+			HWND hwnd = (HWND&)webview->window();
+
+			RECT rect{ 0, 0, 480, window.height };
+			AdjustWindowRectEx(&rect, WS_OVERLAPPED | WS_CHILD, false, 0);
+			SetWindowPos(hwnd, nullptr,
+				window.width - 480, 0,
+				rect.right - rect.left,
+				rect.bottom - rect.top,
+				SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+		}
+
 		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
 
 		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear &&
@@ -768,6 +812,18 @@ bool Sdl2Ui::HandleErrorOutput(const std::string &message) {
 	return true;
 }
 
+void Sdl2Ui::BeginTextCapture() {
+	SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+	SDL_RaiseWindow(sdl_window);
+	SDL_StartTextInput();
+	Output::Debug("begin capture");
+}
+
+void Sdl2Ui::EndTextCapture() {
+	SDL_StopTextInput();
+	Output::Debug("end capture");
+}
+
 void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
 	switch (evnt.type) {
 		case SDL_WINDOWEVENT:
@@ -821,6 +877,12 @@ void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
 		case SDL_FINGERMOTION:
 			ProcessFingerEvent(evnt);
 			return;
+
+		case SDL_TEXTINPUT:
+		case SDL_TEXTEDITING:
+		case SDL_TEXTEDITING_EXT:
+			ProcessTextEditEvent(evnt);
+			break;
 	}
 }
 
@@ -1089,6 +1151,33 @@ void Sdl2Ui::ProcessFingerEvent(SDL_Event& evnt) {
 	/* unused */
 	(void) evnt;
 #endif
+}
+
+void Sdl2Ui::ProcessTextEditEvent(SDL_Event& event) {
+	if (event.type != SDL_TEXTINPUT) {
+		auto& composition = Input::composition;
+		composition.text.clear();
+
+		if (event.type == SDL_TEXTEDITING_EXT) {
+			composition.text.append(event.editExt.text);
+			SDL_free(event.editExt.text);
+		}
+		else composition.text.append(event.edit.text);
+		Output::Debug("`{}` {} {} ext={} win={}", composition.text, event.editExt.start, event.editExt.length, (int)(event.type == SDL_TEXTEDITING_EXT), event.editExt.windowID);
+
+		if (composition.text.empty()) {
+			composition.active = false;
+			return;
+		}
+
+		composition.active = true;
+		composition.sel_start = event.editExt.start;
+		composition.sel_length = event.editExt.length;
+		return;
+	}
+
+	Input::text_input.clear();
+	Input::text_input.append(event.text.text);
 }
 
 void Sdl2Ui::SetAppIcon() {
