@@ -31,6 +31,7 @@ using json = nlohmann::json;
 #  include <cpr/cpr.h>
 #  include <uv.h>
 #  include "platform.h"
+#  include "multiplayer/game_multiplayer.h"
 #  define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
 #  if defined(_WIN32)
 #    define timegm _mkgmtime
@@ -58,6 +59,20 @@ namespace {
 	int next_id = 0;
 	int index_version = 1;
 	int64_t db_lastwrite = LLONG_MAX;
+
+	std::vector<std::unique_ptr<cpr::Session>> session_pool;
+
+	std::unique_ptr<cpr::Session> AcquireSession() {
+		if (session_pool.empty())
+			return std::make_unique<cpr::Session>();
+		std::unique_ptr<cpr::Session> out;
+		out.swap(session_pool.back());
+		session_pool.pop_back();
+		return out;
+	}
+	void ReleaseSession(std::unique_ptr<cpr::Session>&& session) {
+		session_pool.push_back(std::move(session));
+	}
 
 	FileRequestAsync* GetRequest(const std::string& path) {
 		auto it = async_requests.find(path);
@@ -164,9 +179,18 @@ namespace {
 					url_ += sobj->GetRequestExtension();
 					path_ += sobj->GetRequestExtension();
 				}
-				std::ofstream out(path_, std::ios::binary);
 
-				auto resp = cpr::Download(out, cpr::Url{ url_ });
+				Platform::File handle(FileFinder::MakeCanonical(fmt::format("{}/..", path_), 0));
+				handle.MakeDirectory(true);
+
+				std::ofstream out(std::filesystem::u8path(path_), std::ios::binary);
+
+				auto session = AcquireSession();
+				session->SetUrl(cpr::Url{ url_ });
+				auto resp = session->Download(out);
+				out.flush();
+				ReleaseSession(std::move(session));
+
 				ctx->http_status = resp.status_code;
 				if (resp.status_code == 0) {
 					ctx->http_status = 1000 + (int)resp.error.code;
@@ -216,13 +240,13 @@ namespace {
 void AsyncHandler::CreateRequestMapping(const std::string& file) {
 	auto f = FileFinder::Game().OpenInputStream(file);
 	if (!f) {
-		Output::Error("Emscripten: Reading index.json failed");
+		Output::Error("Reading index.json failed");
 		return;
 	}
 
 	json j = json::parse(f, nullptr, false);
 	if (j.is_discarded()) {
-		Output::Error("Emscripten: index.json is not a valid JSON file");
+		Output::Error("index.json is not a valid JSON file");
 		return;
 	}
 
@@ -303,7 +327,6 @@ FileRequestAsync* AsyncHandler::RequestFile(std::string_view folder_name, std::s
 		return request;
 	}
 
-	//Output::Debug("Waiting for {}", path);
 	Web_API::OnRequestFile(path);
 
 	return RegisterRequest(std::move(path), std::string(folder_name), std::string(file_name));
@@ -349,6 +372,9 @@ void AsyncHandler::SaveFilesystem(int slot_id) {
 			onSaveSlotUpdated($0);
 		});
 	}, slot_id);
+#elif defined(PLAYER_YNO)
+	if (slot_id != 1) return;
+	GMI().UploadSaveFile();
 #endif
 }
 
@@ -536,14 +562,12 @@ void FileRequestAsync::DownloadDone(bool success) {
 	}
 
 	if (success) {
-#ifdef EMSCRIPTEN
 		if (state == State_Pending) {
 			// Update directory structure (new file was added)
 			if (FileFinder::Game()) {
 				FileFinder::Game().ClearCache();
 			}
 		}
-#endif
 
 		state = State_DoneSuccess;
 

@@ -48,7 +48,11 @@
 #  include "scene_settings.h"
 #  include "chat_overlay.h"
 #  include "graphics.h"
-
+#  include "platform.h"
+#  include <lcf/lsd/reader.h>
+#  if defined(_WIN32) && !defined(timegm)
+#    define timegm _mkgmtime
+#  endif
 using namespace std::literals::chrono_literals;
 using json = nlohmann::json;
 #endif
@@ -1053,6 +1057,8 @@ void Game_Multiplayer::Update() {
 void Game_Multiplayer::SetConfig(const Game_ConfigOnline& cfg) {
 	this->cfg = cfg;
 	session_token = cfg.session_token.Get();
+	if (!session_token.empty())
+		SyncSaveFile();
 	SetNametagMode((int)cfg.nametag_mode.Get());
 	if (!cfg.username.Get().empty())
 		SetNickname(cfg.username.Get());
@@ -1092,7 +1098,6 @@ void Game_Multiplayer::CheckLoginCallback(cpr::Response resp) {
 	else {
 		username = (std::string)body["name"];
 		cfg.username.Set(username);
-		Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Username set to {}.", username));
 	}
 	Graphics::GetChatOverlay().MarkDirty();
 }
@@ -1156,4 +1161,60 @@ void Game_Multiplayer::SetNickname(StringView name) {
 	cfg.username.Set(value);
 	Graphics::GetChatOverlay().MarkDirty();
 	CheckLogin();
+}
+
+void Game_Multiplayer::SyncSaveFile() const {
+	cpr::Header header;
+	header["Authorization"] = session_token;
+	auto timestampResp = cpr::Get(cpr::Url{"https://connect.ynoproject.net/2kki/api/savesync?command=timestamp"}, header);
+	if (!(timestampResp.status_code >= 200 && timestampResp.status_code < 300))
+		return Output::Warning("failed to get server save timestamp: {}", timestampResp.status_code);
+
+	std::istringstream ss(timestampResp.text);
+	std::tm timestamp;
+	ss >> std::get_time(&timestamp, "%Y-%m-%dT%H:%M:%SZ"); // RFC3339
+	if (ss.fail())
+		return Output::Warning("could not parse save timestamp: `{}`", timestampResp.text);
+	time_t last_synced = timegm(&timestamp);
+
+	const char* path = "Save01.lsd";
+	Platform::File savefile(path);
+	if (savefile.GetLastModified() >= last_synced)
+		return Output::Info("Save slot 1 is up to date.");
+
+	std::ofstream output(path, std::ios::binary);
+	auto resp = cpr::Download(output, cpr::Url{"https://connect.ynoproject.net/2kki/api/savesync?command=get"}, header);
+	if (resp.status_code >= 200 && resp.status_code < 300)
+		Output::Info("Save slot 1 has been updated.");
+	else
+		Output::Warning("failed to update save slot 1: {}", resp.status_code);
+}
+
+void Game_Multiplayer::UploadSaveFile() const {
+	if (session_token.empty()) return;
+
+	const char* path = "Save01.lsd";
+	Platform::File savefile(path);
+	if (!savefile.Exists())
+		return Output::Warning("bug: no save file to upload!");
+
+	cpr::Header header;
+	header["Authorization"] = session_token;
+
+	//auto stream = FileFinder::Save().OpenFile(path);
+	//size_t size = stream.GetSize();
+	//std::string data(size, '\0');
+	//stream.read(&data[0], size);
+	//if (stream.fail() || stream.bad())
+	//	return Output::Warning("failed to read save file for uploading");
+
+	auto resp = cpr::Post(
+		cpr::Url{ "https://connect.ynoproject.net/2kki/api/savesync?command=push" }, header,
+		//cpr::Body{ data }
+		cpr::Body{ cpr::File{path} }
+	);
+	if (resp.status_code >= 200 && resp.status_code < 300)
+		Output::Info("Uploaded save slot 1. ({} bytes up)", resp.uploaded_bytes);
+	else
+		Output::Warning("failed to upload save slot 1: {}", resp.status_code);
 }

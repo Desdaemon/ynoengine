@@ -761,18 +761,21 @@ void Window_Settings::RefreshButtonList() {
 void Window_Settings::RefreshOnline() {
 	Game_ConfigOnline& cfg = GMI().GetConfig();
 
+	using LockedMenuItem = LockedConfigParam<StringView>;
+
 	if (!cfg.username.Get().empty() && !cfg.session_token.Get().empty()) {
-		AddOption(MenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});
+		AddOption(LockedMenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});
 		AddOption(MenuItem("Logout", "", ""), [this] {
 			GMI().Logout();
 			Refresh();
 		});
+		GetFrame().options.back().color = Font::ColorKnockout;
 	}
 	else {
 		if (cfg.username.Get().empty())
-			AddOption(MenuItem("Status", "", "Username not set"), [] {});
+			AddOption(LockedMenuItem("Status", "", "Username not set"), [] {});
 		else
-			AddOption(MenuItem("Status", "", fmt::format("Playing as guest user")), [] {});
+			AddOption(LockedMenuItem("Status", "", fmt::format("Playing as guest user")), [] {});
 		
 		AddOption(cfg.username, [this, &cfg] {
 			auto& value = GetCurrentOption().value_text;
@@ -784,19 +787,25 @@ void Window_Settings::RefreshOnline() {
 		AddOption(cfg.password, [this, &cfg] {
 			cfg.password.Set(GetCurrentOption().value_text);
 		});
-		if (!GMI().login_failure.empty()) {
-			AddOption(MenuItem(GMI().login_failure, "", ""), [] {});
+		auto& failure = GMI().login_failure;
+		if (!failure.empty()) {
+			if (failure.find("bad login") != std::string::npos)
+				AddOption(LockedMenuItem("Invalid username or password", "", ""), [] {});
+			else
+				AddOption(LockedMenuItem("Could not login", "", failure), [] {});
 		}
 		AddOption(MenuItem("Login", "", ""), [this, &cfg] {
 			GMI().Login(cfg.username.Get(), cfg.password.Get());
 			cfg.password.Set("");
 			Refresh();
 		});
+		GetFrame().options.back().color = Font::ColorKnockout;
 		AddOption(MenuItem("Register", "", ""), [this, &cfg] {
 			Output::Warning("Register not implemented");
 			cfg.password.Set("");
 			Refresh();
 		});
+		GetFrame().options.back().color = Font::ColorKnockout;
 	}
 
 	AddOption(cfg.nametag_mode, [this, &cfg] {
