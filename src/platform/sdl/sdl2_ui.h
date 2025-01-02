@@ -83,8 +83,11 @@ public:
 #endif
 
 	/** begin populating Input::text_input and Input::composition */
-	void BeginTextCapture() override;
+	void BeginTextCapture(Rect* textbox = nullptr) override;
 	void EndTextCapture() override;
+	void Dispatch(Intent) override;
+	webview::webview& GetWebview();
+	void SetWebviewLayout(WebviewLayout) override;
 
 	/** @} */
 
@@ -161,6 +164,12 @@ private:
 
 	std::unique_ptr<webview::webview> webview;
 	std::thread webview_thread;
+	bool webview_visible = true;
+	Rect webview_dims{};
+	void ModifyViewport();
+	void LayoutWebview();
 };
+
+inline webview::webview& Sdl2Ui::GetWebview() { return *webview.get(); }
 
 #endif

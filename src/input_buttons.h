@@ -88,6 +88,7 @@ namespace Input {
 		SHOW_CHAT,
 		CHAT_SCROLL_DOWN,
 		CHAT_SCROLL_UP,
+		TOGGLE_SIDEBAR,
 		BUTTON_COUNT
 	};
 
@@ -137,6 +138,7 @@ namespace Input {
 		"SHOW_CHAT",	
 		"CHAT_SCROLL_DOWN",
 		"CHAT_SCROLL_UP",
+		"TOGGLE_SIDEBAR",
 		"BUTTON_COUNT");
 
 	constexpr auto kInputButtonHelp = lcf::makeEnumTags<InputButton>(
@@ -185,6 +187,7 @@ namespace Input {
 		"Toggle chat display",
 		"Scroll chat window down",
 		"Scroll chat window up",
+		"Toggle sidebar display",
 		"Total Button Count");
 
 	/**
@@ -201,6 +204,7 @@ namespace Input {
 			case FAST_FORWARD_A:
 			case FAST_FORWARD_B:
 			case SHOW_CHAT:
+			case TOGGLE_SIDEBAR:
 				return true;
 			default:
 				return false;
