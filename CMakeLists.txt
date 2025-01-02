@@ -516,6 +516,8 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 		src/multiplayer/scene_overlay.cpp
 		src/multiplayer/scene_online.h
 		src/multiplayer/scene_online.cpp
+		src/multiplayer/scene_nexus.h
+		src/multiplayer/scene_nexus.cpp
 	)
 	if(WIN32)
 		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress

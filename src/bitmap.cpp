@@ -256,6 +256,11 @@ ImageOpacity Bitmap::ComputeImageOpacity(Rect rect) const {
 		ImageOpacity::Alpha_8Bit;
 }
 
+void Bitmap::SetBilinear() {
+	pixman_image_set_filter(bitmap.get(), PIXMAN_FILTER_BILINEAR, nullptr, 0);
+	pixman_image_set_component_alpha(bitmap.get(), true);
+}
+
 void Bitmap::CheckPixels(uint32_t flags) {
 	if (flags & Flag_System) {
 		DynamicFormat format(32,8,24,8,16,8,8,8,0,PF::Alpha);

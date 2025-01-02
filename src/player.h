@@ -438,10 +438,8 @@ namespace Player {
 
 	extern std::function<void(Game_Config&)> did_parse_config;
 
-#ifdef EMSCRIPTEN
 	/** Name of game emscripten uses */
 	extern std::string emscripten_game_name;
-#endif
 }
 
 inline bool Player::IsRPG2k() {

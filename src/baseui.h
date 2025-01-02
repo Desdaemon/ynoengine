@@ -266,9 +266,23 @@ public:
 	Game_ConfigVideo GetConfig() const;
 
 	/** Enables receiving input from IME. Meant to be paired with EndTextCapture. */
-	virtual void BeginTextCapture() {}
+	virtual void BeginTextCapture(Rect* textbox = nullptr) {}
 	virtual void EndTextCapture() {}
 
+	enum class Intent : char {
+		ToggleWebview,
+		ToggleDetachWebview,
+	};
+
+	/** Entrypoint for special actions that UI implementations may opt in. */
+	virtual void Dispatch(Intent) {}
+
+	enum class WebviewLayout : char {
+		Sidebar,
+		Expanded,
+	};
+
+	virtual void SetWebviewLayout(WebviewLayout layout);
 protected:
 	/**
 	 * Protected Constructor. Use CreateUi instead.
@@ -335,6 +349,8 @@ protected:
 
 	/** Used by the F2 toggle: Remembers which configuration (ON or Overlay) was used */
 	ConfigEnum::ShowFps original_fps_show_state = ConfigEnum::ShowFps::OFF;
+
+	WebviewLayout webview_layout = WebviewLayout::Sidebar;
 };
 
 /** Global DisplayUi variable. */
@@ -453,5 +469,7 @@ inline void BaseUi::SetFrameLimit(int fps_limit) {
 
 	frame_limit = (fps_limit == 0 ? Game_Clock::duration(0) : Game_Clock::TimeStepFromFps(fps_limit));
 }
+
+inline void BaseUi::SetWebviewLayout(WebviewLayout layout) { webview_layout = layout; }
 
 #endif

@@ -30,8 +30,10 @@ using json = nlohmann::json;
 #  include <lcf/reader_util.h>
 #  include <cpr/cpr.h>
 #  include <uv.h>
+#  include <mutex>
 #  include "platform.h"
 #  include "multiplayer/game_multiplayer.h"
+#  include "player.h"
 #  define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
 #  if defined(_WIN32)
 #    define timegm _mkgmtime
@@ -61,8 +63,10 @@ namespace {
 	int64_t db_lastwrite = LLONG_MAX;
 
 	std::vector<std::unique_ptr<cpr::Session>> session_pool;
+	std::mutex session_mutex{};
 
 	std::unique_ptr<cpr::Session> AcquireSession() {
+		std::lock_guard _guard(session_mutex);
 		if (session_pool.empty())
 			return std::make_unique<cpr::Session>();
 		std::unique_ptr<cpr::Session> out;
@@ -71,6 +75,7 @@ namespace {
 		return out;
 	}
 	void ReleaseSession(std::unique_ptr<cpr::Session>&& session) {
+		std::lock_guard _guard(session_mutex);
 		session_pool.push_back(std::move(session));
 	}
 
@@ -315,7 +320,7 @@ void AsyncHandler::ClearRequests() {
 			++it;
 		}
 	}
-	async_requests.clear();
+	db_lastwrite = LLONG_MAX;
 }
 
 FileRequestAsync* AsyncHandler::RequestFile(std::string_view folder_name, std::string_view file_name) {
@@ -434,12 +439,11 @@ void FileRequestAsync::Start() {
 		request_path = "https://ynoproject.net/data/";
 #  endif
 
-	//if (!Player::emscripten_game_name.empty()) {
-	//	request_path += Player::emscripten_game_name + "/";
-	//} else {
-		// TODO: get the current game
+	if (!Player::emscripten_game_name.empty()) {
+		request_path += Player::emscripten_game_name + "/";
+	} else {
 		request_path += "2kki/";
-	//}
+	}
 
 	std::string modified_path;
 	if (index_version >= 2) {
@@ -494,9 +498,7 @@ void FileRequestAsync::Start() {
 	std::string request_file = (it != file_mapping.end() ? it->second : path);
 
 #ifndef EMSCRIPTEN
-	auto handle = Platform::File{std::string(request_file)};
-	auto lastmodified = handle.GetLastModified();
-	if (lastmodified >= db_lastwrite) {
+	if (Platform::File(request_path).GetLastModified() >= db_lastwrite) {
 		DownloadDone(true);
 		return;
 	}

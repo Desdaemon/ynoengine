@@ -523,7 +523,10 @@ void Game_Multiplayer::InitConnection() {
 			Connect(room_id);
 
 		// sync chat messages
-		std::string endpoint = fmt::format("https://connect.ynoproject.net/2kki/api/chathistory?globalMsgLimit={}&partyMsgLimit={}&lastMsgId={}", 200, 100, lastmsgid); cpr::Response resp = cpr::Get(cpr::Url{endpoint});
+		cpr::Response resp = cpr::Get(
+			cpr::Url{ ApiEndpoint("chathistory") },
+			cpr::Parameters{ {"globalMsgLimit", "200"}, {"partyMsgLimit", "100"}, {"lastMsgId", lastmsgid} }
+		);
 		if (resp.status_code >= 200 && resp.status_code < 300) {
 			json chatmsgs = json::parse(resp.text);
 			for (auto& it : chatmsgs["players"]) {
@@ -542,14 +545,16 @@ void Game_Multiplayer::InitConnection() {
 				std::string system;
 				std::string badge;
 				bool account = false;
+				int rank = 0;
 				if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
 					name = player->second.name;
 					system = player->second.systemName;
 					badge = player->second.badge;
 					account = player->second.account;
+					rank = player->second.rank;
 				}
 				std::string contents((*it)["contents"]);
-				chatoverlay.AddMessage(contents, name, system, badge, account);
+				chatoverlay.AddMessage(contents, name, system, badge, account, true, rank);
 				lastmsgid = (std::string)(*it)["msgId"];
 			}
 			if (!username.empty()) {
@@ -572,15 +577,16 @@ void Game_Multiplayer::InitConnection() {
 		std::string system;
 		std::string badge;
 		bool account = false;
+		int rank = 0;
 		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
 			badge = player->second.badge;
 			account = player->second.account;
+			rank = player->second.rank;
 		}
-		Output::Debug("(gc) {}: {}", name, p.msg);
-		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account);
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account, true, rank);
 		lastmsgid = p.msgid;
 	});
 	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
@@ -588,19 +594,19 @@ void Game_Multiplayer::InitConnection() {
 		std::string system;
 		std::string badge;
 		bool account = false;
+		int rank = 0;
 		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
 			badge = player->second.badge;
 			account = player->second.account;
+			rank = player->second.rank;
 		}
-		Output::Debug("(mc) {}: {}", name, p.msg);
-		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account);
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account, false, rank);
 	});
 	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
 		auto& player = playerdata[p.uuid];
-		Output::Debug("p: {}", p.name);
 		player.name = p.name;
 		player.systemName = p.systemName;
 		player.rank = p.rank;
@@ -939,6 +945,7 @@ void Game_Multiplayer::UpdateCUWeather() {
 }
 
 void Game_Multiplayer::UpdateGlobalVariables() {
+	if (!Main_Data::game_variables) return;
 	UpdateNBPlayers();
   UpdateCUTime();
   UpdateCUWeather();
@@ -1079,8 +1086,7 @@ void Game_Multiplayer::Update() {
 void Game_Multiplayer::SetConfig(const Game_ConfigOnline& cfg) {
 	this->cfg = cfg;
 	session_token = cfg.session_token.Get();
-	if (!session_token.empty())
-		SyncSaveFile();
+	SyncSaveFile();
 	SetNametagMode((int)cfg.nametag_mode.Get());
 	if (!cfg.username.Get().empty())
 		SetNickname(cfg.username.Get());
@@ -1106,7 +1112,7 @@ void Game_Multiplayer::CheckLogin(bool async) {
 
 	cpr::Header header;
 	header["Authorization"] = token;
-	auto resp = cpr::Get(cpr::Url{ "https://connect.ynoproject.net/2kki/api/info" }, header);
+	auto resp = cpr::Get(cpr::Url{ ApiEndpoint("info")}, header);
 	CheckLoginCallback(resp);
 }
 
@@ -1130,7 +1136,7 @@ void Game_Multiplayer::Login(std::string_view username, std::string_view passwor
 	header["Content-Type"] = "application/x-www-form-urlencoded";
 
 	auto resp = cpr::Post(
-		cpr::Url{ "https://connect.ynoproject.net/2kki/api/login" },
+		cpr::Url{ ApiEndpoint("login") },
 		cpr::Body{ formdata }, header);
 	if (resp.status_code >= 200 && resp.status_code < 300) {
 		login_failure.clear();
@@ -1185,10 +1191,19 @@ void Game_Multiplayer::SetNickname(StringView name) {
 	CheckLogin();
 }
 
+std::string Game_Multiplayer::ApiEndpoint(std::string_view path) const {
+	std::string_view game = Player::emscripten_game_name;
+	if (game.empty())
+		game = "2kki";
+	return fmt::format("https://connect.ynoproject.net/{}/api/{}", game, path);
+}
+
 void Game_Multiplayer::SyncSaveFile() const {
+	if (session_token.empty() || !FileFinder::Game()) return;
+
 	cpr::Header header;
 	header["Authorization"] = session_token;
-	auto timestampResp = cpr::Get(cpr::Url{"https://connect.ynoproject.net/2kki/api/savesync?command=timestamp"}, header);
+	auto timestampResp = cpr::Get(cpr::Url{ ApiEndpoint("savesync?command=timestamp") }, header);
 	if (!(timestampResp.status_code >= 200 && timestampResp.status_code < 300))
 		return Output::Warning("failed to get server save timestamp: {}", timestampResp.status_code);
 
@@ -1200,40 +1215,37 @@ void Game_Multiplayer::SyncSaveFile() const {
 	time_t last_synced = timegm(&timestamp);
 
 	const char* path = "Save01.lsd";
-	Platform::File savefile(path);
-	if (savefile.GetLastModified() >= last_synced)
+	auto savefile = FileFinder::Save().FindFile(path);
+	if (!savefile.empty() && Platform::File(savefile).GetLastModified() >= last_synced)
 		return Output::Info("Save slot 1 is up to date.");
+	if (savefile.empty())
+		savefile = FileFinder::MakeCanonical(FileFinder::MakePath(FileFinder::Save().GetFullPath(), path));
 
-	std::ofstream output(path, std::ios::binary);
-	auto resp = cpr::Download(output, cpr::Url{"https://connect.ynoproject.net/2kki/api/savesync?command=get"}, header);
-	if (resp.status_code >= 200 && resp.status_code < 300)
+	std::ofstream output(savefile, std::ios::binary);
+	auto resp = cpr::Download(output, cpr::Url{ ApiEndpoint("savesync?command=get") }, header);
+	if (resp.status_code >= 200 && resp.status_code < 300) {
+		output.flush();
+		FileFinder::Save().ClearCache();
 		Output::Info("Save slot 1 has been updated.");
+	}
 	else
 		Output::Warning("failed to update save slot 1: {}", resp.status_code);
 }
 
 void Game_Multiplayer::UploadSaveFile() const {
-	if (session_token.empty()) return;
+	if (session_token.empty() || !FileFinder::Game()) return;
 
 	const char* path = "Save01.lsd";
-	Platform::File savefile(path);
-	if (!savefile.Exists())
+	auto savefile = FileFinder::Save().FindFile(path);
+	if (savefile.empty())
 		return Output::Warning("bug: no save file to upload!");
 
 	cpr::Header header;
 	header["Authorization"] = session_token;
 
-	//auto stream = FileFinder::Save().OpenFile(path);
-	//size_t size = stream.GetSize();
-	//std::string data(size, '\0');
-	//stream.read(&data[0], size);
-	//if (stream.fail() || stream.bad())
-	//	return Output::Warning("failed to read save file for uploading");
-
 	auto resp = cpr::Post(
-		cpr::Url{ "https://connect.ynoproject.net/2kki/api/savesync?command=push" }, header,
-		//cpr::Body{ data }
-		cpr::Body{ cpr::File{path} }
+		cpr::Url{ ApiEndpoint("savesync?command=push") }, header,
+		cpr::Body{ cpr::File{savefile} }
 	);
 	if (resp.status_code >= 200 && resp.status_code < 300)
 		Output::Info("Uploaded save slot 1. ({} bytes up)", resp.uploaded_bytes);
