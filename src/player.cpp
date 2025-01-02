@@ -34,6 +34,7 @@
 #ifdef PLAYER_YNO
 #  include <uv.h>
 #  include "multiplayer/chat_overlay.h"
+#  include "web_api.h"
 #endif
 
 #include "async_handler.h"
@@ -141,9 +142,7 @@ namespace Player {
 	Game_ConfigPlayer player_config;
 	Game_ConfigGame game_config;
 	std::function<void(Game_Config&)> did_parse_config;
-#ifdef __EMSCRIPTEN__
 	std::string emscripten_game_name;
-#endif
 	Game_Clock::time_point last_auto_screenshot;
 }
 
@@ -218,8 +217,6 @@ void Player::Init(std::vector<std::string> args) {
 void Player::Run() {
 	Instrumentation::Init("EasyRPG-Player");
 
-	GMI().InitSession();
-
 	Scene::Push(std::make_shared<Scene_Logo>());
 	Graphics::UpdateSceneCallback();
 
@@ -252,6 +249,8 @@ void Player::MainLoop() {
 		return;
 	}
 
+	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+
 	int num_updates = 0;
 	while (Game_Clock::NextGameTimeStep()) {
 		if (num_updates > 0) {
@@ -282,8 +281,6 @@ void Player::MainLoop() {
 	Player::Draw();
 
 	Scene::old_instances.clear();
-
-	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
 
 	if (!Transition::instance().IsActive() && Scene::instance->type == Scene::Null) {
 		Exit();
@@ -337,6 +334,9 @@ void Player::UpdateInput() {
 #ifdef PLAYER_YNO
 	if (Input::IsSystemTriggered(Input::SHOW_CHAT)) {
 		Graphics::GetChatOverlay().SetShowAll();
+	}
+	if (Input::IsSystemTriggered(Input::TOGGLE_SIDEBAR)) {
+		DisplayUi->Dispatch(BaseUi::Intent::ToggleWebview);
 	}
 #endif
 	if (Input::IsSystemTriggered(Input::TOGGLE_ZOOM)) {
@@ -706,14 +706,12 @@ Game_Config Player::ParseCommandLine() {
 			exit(0);
 			break;
 		}*/
-#ifdef __EMSCRIPTEN__
 		if (cp.ParseNext(arg, 1, "--game")) {
 			if (arg.NumValues() > 0) {
 				emscripten_game_name = arg.Value(0);
 			}
 			continue;
 		}
-#endif
 		cp.SkipNext();
 	}
 
@@ -1173,7 +1171,7 @@ void Player::LoadFonts() {
 	if (name_text) {
 		Font::SetNameText(Font::CreateFtFont(std::move(name_text), 11, false, false), false);
 	}
-	
+
 	auto chat_text = FileFinder::OpenFont("NameText");
 	if (chat_text) {
 		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 11, false, false));

@@ -71,22 +71,25 @@ inline Point ChatComponent::GetSize() const {
 class ChatOverlayMessage {
 public:
 	ChatOverlayMessage(
-		ChatOverlay* parent, std::string text, std::string sender, BitmapRef system, std::string badge, bool account);
+		ChatOverlay* parent, std::string text, std::string sender, std::string system, std::string badge, bool account, bool global, int rank);
 	std::string text_orig;
 	std::vector<std::shared_ptr<ChatComponent>> text;
 	std::string sender;
-	BitmapRef system;
+	std::string system;
+	BitmapRef system_bm;
 	BitmapRef badge;
 	bool hidden = false;
 	ChatOverlay* parent;
-	bool account = false;
+	bool account;
+	bool global;
+	int rank;
 
 	std::vector<std::shared_ptr<ChatComponent>> Convert(ChatOverlay* parent, bool has_badge) const;
 	void SetOnInteract(std::function<void(ChatOverlayMessage&)> on_interact);
 private:
 	FileRequestBinding badge_request;
+	FileRequestBinding system_request;
 
-	void OnBadgeReady(FileRequestResult*);
 	std::function<void(ChatOverlayMessage&)> OnInteract;
 };
 
@@ -98,7 +101,9 @@ public:
 	void Draw(Bitmap& dst) override;
 	void Update();
 	void UpdateScene();
-	ChatOverlayMessage& AddMessage(std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "", bool account = true);
+	ChatOverlayMessage& AddMessage(
+		std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "",
+		bool account = true, bool global = true, int rank = 0);
 	void OnResolutionChange() override;
 	void SetShowAll(bool show_all);
 	inline void SetShowAll() { SetShowAll(!show_all); }
@@ -118,8 +123,13 @@ private:
 	int message_max_minimized = 4;
 	int counter = 0;
 	int scroll = 0;
+	int scrollbar_width = 0;
 
-	BitmapRef bitmap, black, grey, scrollbar;
+	BitmapRef bitmap;
+	constexpr static Color black{ 0, 0, 0, 255 };
+	constexpr static Color grey{ 80, 80, 80, 255 };
+	constexpr static Color scrollbar{ 255, 255, 255, 255 };
+
 	std::u32string input;
 
 	std::deque<ChatOverlayMessage> messages;
@@ -154,7 +164,6 @@ public:
 
 	ChatString(StringView other, Color color = default_color) : ChatComponent(0, 0, ChatComponents::String),
 		string(other), color(color) {}
-	//Point Draw(Bitmap& dst) override;
 };
 
 class ChatEmoji : public ChatComponent {
@@ -165,7 +174,6 @@ public:
 	FileRequestBinding request = nullptr;
 
 	ChatEmoji(ChatOverlay* parent, int width, int height, std::string emoji);
-	//Point Draw(Bitmap& dest) override;
 	void RequestBitmap(ChatOverlay* parent);
 };
 
@@ -193,7 +201,11 @@ struct ChatComponentsMap<ChatComponents::Header> { using type = ChatComponent; }
 
 template<ChatComponents Wanted>
 inline typename ChatComponentsMap<Wanted>::type* ChatComponent::Downcast() {
-	if (runtime_type == Wanted || Wanted == ChatComponents::Box) {
+	if (runtime_type == Wanted) {
+		return static_cast<ChatComponentsMap<Wanted>::type*>(this);
+	}
+	if (Wanted == ChatComponents::Box && runtime_type != ChatComponents::String) {
+		// a string doesn't have an intrinsic size
 		return static_cast<ChatComponentsMap<Wanted>::type*>(this);
 	}
 	return nullptr;

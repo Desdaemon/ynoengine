@@ -153,6 +153,7 @@ public:
 
 	void UpdateTimers();
 	void SetNickname(StringView name);
+	std::string ApiEndpoint(std::string_view path) const;
 };
 
 inline Game_Multiplayer& GMI() { return Game_Multiplayer::Instance(); }

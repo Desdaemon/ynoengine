@@ -27,6 +27,9 @@ namespace Web_API {
 	bool ShouldConnectPlayer(std::string_view uuid);
 
 	void OnRequestFile(std::string_view path);
+
+	/** For non-Emscripten platforms, initialize bindings to receive messages from the webview. */
+	void InitializeBindings();
 }
 
 #endif

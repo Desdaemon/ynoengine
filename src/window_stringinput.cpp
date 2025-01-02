@@ -31,7 +31,8 @@ Window_StringInput::Window_StringInput(StringView initial_value, int ix, int iy,
 	opacity = 0;
 	active = false;
 
-	DisplayUi->BeginTextCapture();
+	Rect rect{ ix, iy + 2, width - 16, height - 16 };
+	DisplayUi->BeginTextCapture(&rect);
 
 	Refresh();
 }

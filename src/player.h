@@ -433,7 +433,6 @@ namespace Player {
 
 	extern std::function<void(Game_Config&)> did_parse_config;
 
-#ifdef __EMSCRIPTEN__
 	/** Name of game emscripten uses */
 	extern std::string emscripten_game_name;
 #endif

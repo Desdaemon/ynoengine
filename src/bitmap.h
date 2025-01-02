@@ -616,6 +616,7 @@ public:
 
 	ImageOpacity ComputeImageOpacity() const;
 	ImageOpacity ComputeImageOpacity(Rect rect) const;
+	void SetBilinear();
 
 protected:
 	DynamicFormat format;
