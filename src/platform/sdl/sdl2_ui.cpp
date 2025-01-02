@@ -43,6 +43,7 @@
 #include "player.h"
 #include "bitmap.h"
 #include "lcf/scope_guard.h"
+#include "web_api.h"
 
 #if defined(__APPLE__) && TARGET_OS_OSX
 #  include "platform/macos/macos_utils.h"
@@ -367,6 +368,11 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 		#endif
 
+		// Some hints that need to be set even before the window is created
+		// courtesy of https://github.com/etorth/mir2x/issues/48#issuecomment-2536136453
+		SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+		SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
+
 		// Create our window
 		if (vcfg.window_x.Get() < 0 || vcfg.window_y.Get() < 0 || vcfg.window_height.Get() <= 0 || vcfg.window_width.Get() <= 0) {
 			sdl_window = SDL_CreateWindow(GAME_TITLE,
@@ -464,11 +470,15 @@ bool Sdl2Ui::RefreshDisplayMode() {
 #ifdef PLAYER_YNO
 		webview_thread = std::thread([hwnd, this] {
 			try {
-				webview = std::make_unique<webview::webview>(false, nullptr);
+				webview = std::make_unique<webview::webview>(true, nullptr);
 				auto& w = *webview;
 				w.set_title("YNOproject sidecar");
 				w.set_size(window.width, window.height, WEBVIEW_HINT_NONE);
-				w.set_html(R"html(<head><meta http-equiv=refresh content="0;url=https://ynoproject.net"></head>)html");
+				//w.navigate("https://localhost:8028");
+				//std::string_view game = Player::emscripten_game_name;
+				//if (game.empty())
+				//	game = "2kki";
+				//w.navigate(fmt::format("https://ynoproject.net/{}", game));
 				if (auto widget = w.window(); widget.ok()) {
 #ifdef _WIN32
 					HWND childHwnd = (HWND)widget.value();
@@ -482,18 +492,19 @@ bool Sdl2Ui::RefreshDisplayMode() {
 						window.width - 800, 0,
 						rect.right - rect.left,
 						rect.bottom - rect.top,
-						SWP_FRAMECHANGED | SWP_HIDEWINDOW);
+						SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 #else
 #  error TODO: implement adopting webview as child
 #endif
 				}
+				Web_API::InitializeBindings();
 				w.run();
 			}
 			catch (const webview::exception& err) {
 				Output::Error("webview died: {}", (int)err.error().code());
 			}
 		});
-#endif
+#endif // PLAYER_YNO
 	} else {
 		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
 #ifndef EMSCRIPTEN
@@ -510,6 +521,8 @@ bool Sdl2Ui::RefreshDisplayMode() {
 				SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
 			}
 		}
+		// TODO: Conditionally request focus only if previously held
+		SDL_RaiseWindow(sdl_window);
 #endif
 	}
 	// Need to set up icon again, some platforms recreate the window when
@@ -671,6 +684,7 @@ void Sdl2Ui::UpdateDisplay() {
 				viewport.x = 0;
 				viewport.w = window.width;
 			}
+			ModifyViewport();
 		};
 
 		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Integer) {
@@ -718,15 +732,8 @@ void Sdl2Ui::UpdateDisplay() {
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
 
-		if (webview) {
-			HWND hwnd = (HWND&)webview->window();
-
-			RECT rect{ 0, 0, 800, window.height };
-			SetWindowPos(hwnd, nullptr,
-				window.width - 800, 0,
-				rect.right - rect.left,
-				rect.bottom - rect.top,
-				SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+		if (webview && webview_visible) {
+			LayoutWebview();
 		}
 
 		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
@@ -818,16 +825,18 @@ bool Sdl2Ui::HandleErrorOutput(const std::string &message) {
 	return true;
 }
 
-void Sdl2Ui::BeginTextCapture() {
-	SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+void Sdl2Ui::BeginTextCapture(Rect* textbox) {
 	SDL_RaiseWindow(sdl_window);
+	if (textbox) {
+		auto& box = *textbox;
+		SDL_Rect rect{ box.x, box.y, box.width, box.height };
+		SDL_SetTextInputRect(&rect);
+	}
 	SDL_StartTextInput();
-	Output::Debug("begin capture");
 }
 
 void Sdl2Ui::EndTextCapture() {
 	SDL_StopTextInput();
-	Output::Debug("end capture");
 }
 
 void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
@@ -1166,10 +1175,15 @@ void Sdl2Ui::ProcessTextEditEvent(SDL_Event& event) {
 
 		if (event.type == SDL_TEXTEDITING_EXT) {
 			composition.text.append(event.editExt.text);
+			composition.sel_start = event.editExt.start;
+			composition.sel_length = event.editExt.length;
 			SDL_free(event.editExt.text);
 		}
-		else composition.text.append(event.edit.text);
-		Output::Debug("`{}` {} {} ext={} win={}", composition.text, event.editExt.start, event.editExt.length, (int)(event.type == SDL_TEXTEDITING_EXT), event.editExt.windowID);
+		else {
+			composition.text.append(event.edit.text);
+			composition.sel_start = event.edit.start;
+			composition.sel_length = event.edit.length;
+		}
 
 		if (composition.text.empty()) {
 			composition.active = false;
@@ -1177,8 +1191,6 @@ void Sdl2Ui::ProcessTextEditEvent(SDL_Event& event) {
 		}
 
 		composition.active = true;
-		composition.sel_start = event.editExt.start;
-		composition.sel_length = event.editExt.length;
 		return;
 	}
 
@@ -1480,5 +1492,58 @@ bool Sdl2Ui::OpenURL(std::string_view url) {
 	(void)url;
 	Output::Warning("Cannot Open URL: SDL2 version too old (must be 2.0.14)");
 	return false;
+#endif
+}
+
+void Sdl2Ui::Dispatch(Intent intent) {
+	switch (intent) {
+	case Intent::ToggleWebview: {
+		webview_visible = !webview_visible;
+#ifdef _WIN32
+		HWND hwnd = (HWND&)webview->window().value();
+		ShowWindow(hwnd, webview_visible ? SW_SHOW : SW_HIDE);
+		SDL_RaiseWindow(sdl_window);
+#endif
+		if (webview_visible)
+			LayoutWebview();
+	} break;
+	case Intent::ToggleDetachWebview: {
+		// nothing yet
+	} break;
+	}
+}
+
+void Sdl2Ui::SetWebviewLayout(WebviewLayout layout) {
+	BaseUi::SetWebviewLayout(layout);
+	ModifyViewport();
+	if (layout == WebviewLayout::Expanded && !webview_visible)
+		webview_visible = true;
+	if (webview_visible)
+		LayoutWebview();
+}
+
+void Sdl2Ui::ModifyViewport() {
+	switch (webview_layout) {
+	case WebviewLayout::Sidebar: {
+		webview_dims = { window.width - 800, 0, 800, window.height };
+	} break;
+	case WebviewLayout::Expanded: {
+		webview_dims = { 0, 0, window.width, window.height };
+	} break;
+	}
+}
+
+void Sdl2Ui::LayoutWebview() {
+	if (!webview) return;
+#ifdef _WIN32
+	HWND hwnd = (HWND&)webview->window().value();
+	RECT rect{ 0, 0, webview_dims.width, webview_dims.height };
+	SetWindowPos(hwnd, nullptr,
+		webview_dims.x, webview_dims.y,
+		rect.right - rect.left,
+		rect.bottom - rect.top,
+		SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+#else
+#  error TODO: implement webview resize
 #endif
 }

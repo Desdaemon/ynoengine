@@ -678,7 +678,7 @@ void Window_Settings::RefreshButtonList() {
 				Input::SHOW_LOG };
 			break;
 		case 3:
-			buttons = { Input::SHOW_CHAT, Input::CHAT_SCROLL_UP, Input::CHAT_SCROLL_DOWN };
+			buttons = { Input::SHOW_CHAT, Input::CHAT_SCROLL_UP, Input::CHAT_SCROLL_DOWN, Input::TOGGLE_SIDEBAR };
 	}
 
 	for (auto b: buttons) {
@@ -769,7 +769,7 @@ void Window_Settings::RefreshOnline() {
 			GMI().Logout();
 			Refresh();
 		});
-		GetFrame().options.back().color = Font::ColorKnockout;
+		GetFrame().options.back().color = Font::ColorCritical;
 	}
 	else {
 		if (cfg.username.Get().empty())
@@ -799,13 +799,13 @@ void Window_Settings::RefreshOnline() {
 			cfg.password.Set("");
 			Refresh();
 		});
-		GetFrame().options.back().color = Font::ColorKnockout;
+		GetFrame().options.back().color = Font::ColorCritical;
 		AddOption(MenuItem("Register", "", ""), [this, &cfg] {
 			Output::Warning("Register not implemented");
 			cfg.password.Set("");
 			Refresh();
 		});
-		GetFrame().options.back().color = Font::ColorKnockout;
+		GetFrame().options.back().color = Font::ColorCritical;
 	}
 
 	AddOption(cfg.nametag_mode, [this, &cfg] {
@@ -815,7 +815,7 @@ void Window_Settings::RefreshOnline() {
 	});
 
 	// some debug options
-	AddOption(MenuItem("[DEBUG] Force Disconnect Session", "", ""), [] {
+	AddOption(MenuItem("[DEBUG] Force Reconnect", "", ""), [] {
 		Scene::PopUntil(Scene::SceneType::Map);
 		GMI().sessionConn.Open(GMI().GetSessionEndpoint());
 	});
