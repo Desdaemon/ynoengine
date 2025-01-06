@@ -202,11 +202,11 @@ struct ChatComponentsMap<ChatComponents::Header> { using type = ChatComponent; }
 template<ChatComponents Wanted>
 inline typename ChatComponentsMap<Wanted>::type* ChatComponent::Downcast() {
 	if (runtime_type == Wanted) {
-		return static_cast<ChatComponentsMap<Wanted>::type*>(this);
+		return static_cast<typename ChatComponentsMap<Wanted>::type*>(this);
 	}
 	if (Wanted == ChatComponents::Box && runtime_type != ChatComponents::String) {
 		// a string doesn't have an intrinsic size
-		return static_cast<ChatComponentsMap<Wanted>::type*>(this);
+		return static_cast<typename ChatComponentsMap<Wanted>::type*>(this);
 	}
 	return nullptr;
 }

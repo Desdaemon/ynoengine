@@ -11,9 +11,12 @@
 #include "yno_connection.h"
 
 #ifdef PLAYER_YNO
-#  include <cpr/cpr.h>
 #  include "game_config.h"
 #  include "game_clock.h"
+
+namespace cpr {
+	class Response;
+}
 #endif
 
 class PlayerOther;

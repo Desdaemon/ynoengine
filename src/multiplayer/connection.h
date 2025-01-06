@@ -57,7 +57,7 @@ public:
 	void RegisterSystemHandler(SystemMessage m, SystemMessageHandler h);
 
 	template <typename F>
-	inline void RegisterRawHandler(F&& callback) { raw_handler.swap(std::function(std::forward<F>(callback))); }
+	inline void RegisterRawHandler(F&& callback) { raw_handler = callback; }
 
 	void Dispatch(std::string_view name, ParameterList args = ParameterList());
 

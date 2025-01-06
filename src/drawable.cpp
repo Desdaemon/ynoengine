@@ -41,7 +41,7 @@ void Drawable::RemoveScreenDrawable(lcf::Span<Drawable*> container) {
 	if (container.empty() || !DisplayUi) return;
 	for (auto to_remove = screen_drawables.begin(); to_remove != screen_drawables.end(); ++to_remove) {
 		for (auto& it : container) {
-			if (to_remove._Ptr == &it) {
+			if (to_remove.base() == &it) {
 				screen_drawables.erase(to_remove);
 				break;
 			}
