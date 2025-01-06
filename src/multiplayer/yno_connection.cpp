@@ -1,6 +1,7 @@
 #include "yno_connection.h"
 #include "multiplayer/packet.h"
 #include "output.h"
+#include <cstring>
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -14,6 +15,11 @@
 #  include <cpr/cpr.h>
 #  if defined(_WIN32)
 #    include <synchapi.h>
+#  elif defined(__linux__)
+#    include <linux/futex.h>
+#    include <sys/syscall.h>
+#  else
+#    error No futex implementation available for this platform
 #  endif
 #endif
 #include "../external/TinySHA1.hpp"
@@ -372,15 +378,16 @@ void YNOConnection::Open(std::string_view uri) {
 	uv_queue_work(uv_default_loop(), task,
 	[](uv_work_t* task) {
 		auto& [self, s] = *static_cast<work_data_t*>(task->data);
-#if defined(_WIN32)
 		if (!self->IsConnected()) return;
-
 		self->Close();
 		bool expected_value = false;
+#if defined(_WIN32)
 		if (!WaitOnAddress(self->ConnectedFutex(), &expected_value, sizeof(expected_value), INFINITE))
 			Output::Debug("Failed to wait for previous session to close: {}", GetLastError());
 #else
-#  error TODO: wait on futex
+		if (syscall(SYS_futex, self->ConnectedFutex(), FUTEX_WAKE, expected_value, nullptr, nullptr, 0)) {
+			Output::Debug("Failed to wait for previous session to close: {}", strerror(errno));
+		}
 #endif
 	},
 	[](uv_work_t* task, int) {

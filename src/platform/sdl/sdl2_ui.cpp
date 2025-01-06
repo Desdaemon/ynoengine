@@ -17,13 +17,15 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+
 #include "game_config.h"
 #include "system.h"
 #include "sdl2_ui.h"
 
+#include <SDL_syswm.h>
+
 #ifdef _WIN32
 #  include <windows.h>
-#  include <SDL_syswm.h>
 #  include <dwmapi.h>
 #elif defined(__ANDROID__)
 #  include <jni.h>
@@ -33,6 +35,9 @@
 #  include "platform/emscripten/audio.h"
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
+#elif defined(GTK_MAJOR_VERSION)
+#  include <gtk/gtk.h>
+#  include <gdk/gdk.h>
 #endif
 #include "icon.h"
 
@@ -140,8 +145,7 @@ static uint32_t SelectFormat(const SDL_RendererInfo& rinfo, bool print_all) {
 	return current_fmt;
 }
 
-#ifdef _WIN32
-HWND GetWindowHandle(SDL_Window* window) {
+auto GetWindowHandle(SDL_Window* window) {
 	SDL_SysWMinfo wminfo;
 	SDL_VERSION(&wminfo.version)
 		SDL_bool success = SDL_GetWindowWMInfo(window, &wminfo);
@@ -149,9 +153,16 @@ HWND GetWindowHandle(SDL_Window* window) {
 	if (success < 0)
 		Output::Error("Wrong SDL version");
 
+#if defined(SDL_VIDEO_DRIVER_WINDOWS)
 	return wminfo.info.win.window;
-}
+#elif defined(SDL_VIDEO_DRIVER_X11)
+	return std::make_pair(wminfo.info.x11.display, wminfo.info.x11.window);
+#elif defined(SDL_VIDEO_DRIVER_WAYLAND)
+	// return std::make_pair(wminfo);
+#else
+#  error not implemented on this platform
 #endif
+}
 
 static int FilterUntilFocus(const SDL_Event* evnt);
 
@@ -362,7 +373,9 @@ bool Sdl2Ui::RefreshDisplayMode() {
 
 		// Some hints that need to be set even before the window is created
 		// courtesy of https://github.com/etorth/mir2x/issues/48#issuecomment-2536136453
+		#ifdef SDL_HINT_IME_SUPPORT_EXTENDED_TEXT
 		SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+		#endif
 		SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
 
 		// Create our window
@@ -450,27 +463,26 @@ bool Sdl2Ui::RefreshDisplayMode() {
 			return false;
 		}
 
+		void* display;
 #ifdef _WIN32
 		HWND hwnd = GetWindowHandle(sdl_window);
 		// Not using the enum names because this will fail to build when not using a recent Windows 11 SDK
 		int window_rounding = 1; // DWMWCP_DONOTROUND
 		DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
+#elif defined(_X11_XLIB_H_)
+		XID hwnd;
+		std::tie(display, hwnd) = GetWindowHandle(sdl_window);
 #endif
 
 		renderer_sg.Dismiss();
 		window_sg.Dismiss();
 #ifdef PLAYER_YNO
-		webview_thread = std::thread([hwnd, this] {
+		webview_thread = std::thread([hwnd, display, this] {
 			try {
 				webview = std::make_unique<webview::webview>(true, nullptr);
 				auto& w = *webview;
 				w.set_title("YNOproject sidecar");
 				w.set_size(window.width, window.height, WEBVIEW_HINT_NONE);
-				//w.navigate("https://localhost:8028");
-				//std::string_view game = Player::emscripten_game_name;
-				//if (game.empty())
-				//	game = "2kki";
-				//w.navigate(fmt::format("https://ynoproject.net/{}", game));
 				if (auto widget = w.window(); widget.ok()) {
 #ifdef _WIN32
 					HWND childHwnd = (HWND)widget.value();
@@ -486,7 +498,7 @@ bool Sdl2Ui::RefreshDisplayMode() {
 						rect.bottom - rect.top,
 						SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 #else
-#  error TODO: implement adopting webview as child
+					GtkWidget* childHandle = (GtkWidget*&)widget.value();
 #endif
 				}
 				Web_API::InitializeBindings();
@@ -887,7 +899,9 @@ void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
 
 		case SDL_TEXTINPUT:
 		case SDL_TEXTEDITING:
+#ifdef SDL_TEXTEDITING_EXT
 		case SDL_TEXTEDITING_EXT:
+#endif
 			ProcessTextEditEvent(evnt);
 			break;
 	}
@@ -1165,13 +1179,16 @@ void Sdl2Ui::ProcessTextEditEvent(SDL_Event& event) {
 		auto& composition = Input::composition;
 		composition.text.clear();
 
+#ifdef SDL_TEXTEDITING_EXT
 		if (event.type == SDL_TEXTEDITING_EXT) {
 			composition.text.append(event.editExt.text);
 			composition.sel_start = event.editExt.start;
 			composition.sel_length = event.editExt.length;
 			SDL_free(event.editExt.text);
 		}
-		else {
+		else
+#endif
+		{
 			composition.text.append(event.edit.text);
 			composition.sel_start = event.edit.start;
 			composition.sel_length = event.edit.length;
@@ -1530,6 +1547,5 @@ void Sdl2Ui::LayoutWebview() {
 		rect.bottom - rect.top,
 		SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 #else
-#  error TODO: implement webview resize
 #endif
 }

@@ -295,6 +295,22 @@
 			]
 		},
 		{
+			"name": "linux-ynoshell-relwithdebinfo",
+			"displayName": "Linux (ynoshell, RelWithDebInfo)",
+			"inherits": "linux-relwithdebinfo",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "linux-ynoshell-release",
+			"displayName": "Linux (ynoshell, Release)",
+			"inherits": "linux-release",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
 			"name": "windows-parent",
 			"cacheVariables": {
 				"VCPKG_TARGET_TRIPLET": "$env{VSCMD_ARG_TGT_ARCH}-windows-static"
