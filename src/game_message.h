@@ -96,7 +96,7 @@ namespace Game_Message {
 
 #ifdef PLAYER_YNO
 	using ComponentWrapCallback = const std::function<void(lcf::Span<std::shared_ptr<ChatComponent>> spans)>;
-	int WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const typename ComponentWrapCallback& callback, const Font& font);
+	int WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const ComponentWrapCallback& callback, const Font& font);
 #endif
 
 	/**

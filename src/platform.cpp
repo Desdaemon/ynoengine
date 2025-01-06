@@ -141,7 +141,7 @@ int64_t Platform::File::GetLastModified() const {
 #else
 	struct stat sb = {};
 	int result = ::stat(filename.c_str(), &sb);
-	struct timspec ts = sb.st_mtim;
+	struct timespec ts = sb.st_mtim;
 	return !result ? (int64_t)ts.tv_sec + (int64_t)ts.tv_nsec / 1000000000 : -1;
 #endif
 }
