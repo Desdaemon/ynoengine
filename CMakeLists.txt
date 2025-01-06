@@ -518,6 +518,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 		src/multiplayer/scene_online.cpp
 		src/multiplayer/scene_nexus.h
 		src/multiplayer/scene_nexus.cpp
+		src/multiplayer/webview.h
 	)
 	if(WIN32)
 		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress
@@ -1058,22 +1059,15 @@ else()
 	)
 
 	find_package(Libwebsockets CONFIG REQUIRED)
-	require_lws_config(LWS_ROLE_H1 1 requirements)
-	require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
-	# require_lws_config(LWS_WITH_SECURE_STREAMS 1 requirements)
-	# require_lws_config(LWS_WITH_SECURE_STREAMS_CPP 1 requirements)
-	# require_lws_config(LWS_WITH_SECURE_STREAMS_STATIC_POLICY_ONLY 0 requirements)
-	require_lws_config(LWS_WITH_TLS 1 requirements)
-	# require_lws_config(LWS_WITH_SECURE_STREAMS_AUTH_SIGV4 0 requirements)
+	# require_lws_config(LWS_ROLE_H1 1 requirements)
+	# require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
+	# require_lws_config(LWS_WITH_TLS 1 requirements)
 
 	# uses system trust store
-	require_lws_config(LWS_WITH_MBEDTLS 0 requirements)
-	require_lws_config(LWS_WITH_WOLFSSL 0 requirements)
-	require_lws_config(LWS_WITH_CYASSL 0 requirements)
+	# require_lws_config(LWS_WITH_MBEDTLS 0 requirements)
+	# require_lws_config(LWS_WITH_WOLFSSL 0 requirements)
+	# require_lws_config(LWS_WITH_CYASSL 0 requirements)
 
-	# require_lws_config(LWS_WITH_SYS_FAULT_INJECTION 1 has_fault_injection)
-	# require_lws_config(LWS_WITH_SECURE_STREAMS_PROXY_API 1 has_ss_proxy)
-	# require_lws_config(LWS_WITH_SYS_STATE 1 has_sys_state)
 	if(websockets_shared)
 		target_link_libraries(${PROJECT_NAME} websockets_shared ${LIBWEBSOCKETS_DEP_LIBS})
 		add_dependencies(${PROJECT_NAME} websockets_shared)
@@ -1085,7 +1079,12 @@ else()
 	#add_dependencies(${PROJECT_NAME} websocketpp::websocketpp)
 	#find_package(httplib CONFIG REQUIRED)
 	#target_link_libraries(${PROJECT_NAME} httplib::httplib)
-	find_package(cpr CONFIG REQUIRED)
+	# find_package(cpr CONFIG REQUIRED)
+	include(FetchContent)
+	FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
+	                         GIT_TAG dec9422db3af470641f8b0d90e4b451c4daebf64) # Replace with your desired git commit from: https://github.com/libcpr/cpr/releases
+
+	FetchContent_MakeAvailable(cpr)
 	target_link_libraries(${PROJECT_NAME} cpr::cpr)
 endif()
 

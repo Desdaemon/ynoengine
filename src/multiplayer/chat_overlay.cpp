@@ -16,18 +16,15 @@
  */
 #include <algorithm>
 #include <regex>
-#include <tuple>
 
 #include <uv.h>
 #include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
-#include <chrono>
 
 using json = nlohmann::json;
 
 #include "chat_overlay.h"
 #include "drawable_mgr.h"
-#include "player.h"
 #include "baseui.h"
 #include "output.h"
 #include "input_buttons.h"
@@ -67,7 +64,7 @@ namespace {
 		[](uv_work_t*) {
 			auto resp = cpr::Get(cpr::Url{"https://ynoproject.net/game/ynomoji.json"});
 			if (!(resp.status_code >= 200 && resp.status_code < 300))
-				Output::Error("no emojis??");
+				Output::Error("no emojis: {}", resp.text);
 			json data = json::parse(resp.text, nullptr, false);
 			if (data.is_discarded())
 				Output::Error("invalid ynomoji json");
@@ -506,8 +503,8 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 	auto _guard = font->ApplyStyle(style);
 
 	out.emplace_back(std::make_shared<ChatComponent>([this, has_badge] {
-		auto& font = Font::ChatText();
-		Rect rect = Text::GetSize(*font, fmt::format("[{}] ", sender));
+		auto& font = *Font::ChatText();
+		Rect rect = Text::GetSize(font, fmt::format("[{}] ", sender));
 		int square = ChatTextHeight();
 		if (has_badge)
 			rect.width += square;

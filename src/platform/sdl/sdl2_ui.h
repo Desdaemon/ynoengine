@@ -28,7 +28,7 @@
 #include <SDL.h>
 
 #ifdef PLAYER_YNO
-#  include <webview/webview.h>
+#  include "multiplayer/webview.h"
 #endif
 
 extern "C" {

@@ -3,7 +3,6 @@
 #include <emscripten/emscripten.h>
 #else
 #  if defined(PLAYER_YNO)
-#    include <webview/webview.h>
 #    include <fmt/format.h>
 #    include <nlohmann/json.hpp>
 

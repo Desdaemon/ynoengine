@@ -80,7 +80,7 @@ void Scene_Nexus::InitWebview() {
 			selected_game = args_[0];
 			return "null";
 		});
-		webview.navigate("https://localhost:8028/home");
+		webview.navigate("https://ynoproject.net");
 	});
 }
 
