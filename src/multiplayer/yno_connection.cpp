@@ -53,6 +53,7 @@ struct YNOConnection::IMPL {
 	}
 	static bool onmessage_common(const std::string& cstr, void* userData, bool isText) {
 		auto _this = static_cast<YNOConnection*>(userData);
+		if (!_this->IsConnected()) return false;
 		// IMPORTANT!! numBytes is always one byte larger than the actual length
 		// so the actual length is numBytes - 1
 

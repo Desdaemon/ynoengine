@@ -52,6 +52,7 @@
 #  include "graphics.h"
 #  include "platform.h"
 #  include <lcf/lsd/reader.h>
+#  include "status_overlay.h"
 #  if defined(_WIN32) && !defined(timegm)
 #    define timegm _mkgmtime
 #  endif
@@ -148,10 +149,18 @@ static std::string get_room_url(int room_id, std::string_view session_token) {
 	return room_url;
 }
 
-void Game_Multiplayer::InitConnection() {	
+void Game_Multiplayer::InitConnection() {
 	using YSM = YNOConnection::SystemMessage;
 	using MCo = Multiplayer::Connection;
+	connection.RegisterSystemHandler(YSM::OPEN, [this] (MCo& c) {
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
+	});
 	connection.RegisterSystemHandler(YSM::CLOSE, [this] (MCo& c) {
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
 		if (session_active) {
 			Output::Info("Reconnecting: ID={}", room_id);
 			Connect(room_id);
@@ -162,6 +171,9 @@ void Game_Multiplayer::InitConnection() {
 	connection.RegisterSystemHandler(YSM::EXIT, [this] (MCo& c) {
 		// an exit happens outside ynoclient
 		// resume with SessionReady()
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
 		Output::Debug("MP: socket exited with code 1028");
 		session_active = false;
 		Quit();
@@ -612,6 +624,9 @@ void Game_Multiplayer::InitConnection() {
 		player.rank = p.rank;
 		player.account = p.account;
 		player.badge = p.badge;
+	});
+	sessionConn.RegisterHandler<SessionPlayerCount>("pc", [this](SessionPlayerCount& p) {
+		Graphics::GetStatusOverlay().SetPlayerCount(p.player_count);
 	});
 #endif
 }

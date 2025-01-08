@@ -769,14 +769,13 @@ void Window_Settings::RefreshOnline() {
 			GMI().Logout();
 			Refresh();
 		});
-		GetFrame().options.back().color = Font::ColorCritical;
 	}
 	else {
 		if (cfg.username.Get().empty())
 			AddOption(LockedMenuItem("Status", "", "Username not set"), [] {});
 		else
 			AddOption(LockedMenuItem("Status", "", fmt::format("Playing as guest user")), [] {});
-		
+
 		AddOption(cfg.username, [this, &cfg] {
 			auto& value = GetCurrentOption().value_text;
 			if (!value.empty() && GMI().sessionConn.IsConnected() && Input::IsRawKeyTriggered(Input::Keys::RETURN)) {
@@ -805,7 +804,6 @@ void Window_Settings::RefreshOnline() {
 			cfg.password.Set("");
 			Refresh();
 		});
-		GetFrame().options.back().color = Font::ColorCritical;
 	}
 
 	AddOption(cfg.nametag_mode, [this, &cfg] {
