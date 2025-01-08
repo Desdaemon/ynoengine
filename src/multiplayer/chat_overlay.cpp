@@ -35,19 +35,14 @@ using json = nlohmann::json;
 #include "multiplayer/scene_overlay.h"
 #include "messages.h"
 #include "input.h"
-#include "ynoicons.h"
 #include "font.h"
 #include "compiler.h"
+#include "icons.h"
+#include "overlay_utils.h"
 
 namespace {
-	bool LargeScreen() {
-		return DisplayUi->GetScreenSurfaceRect().width >= 640;
-	}
-	int ChatTextHeight() {
-		return LargeScreen() ? 37 : 12;
-	}
 	Point ChatTextSquare() {
-		int text_height = ChatTextHeight();
+		int text_height = OverlayUtils::ChatTextHeight();
 		return { text_height, text_height };
 	}
 	enum class FileExtensions : char { png, gif, webp };
@@ -83,50 +78,6 @@ namespace {
 		},
 		[](uv_work_t* task, int) { delete task; });
 	}
-
-	/** formatted in the same way as an exfont */
-	BitmapRef ynoicons = nullptr;
-	BitmapRef glyph_bm = nullptr;
-
-	void InitializeYnoIcons() {
-		ynoicons = Bitmap::Create(resources_ynoicons_png, sizeof(resources_ynoicons_png));
-		if (!ynoicons)
-			Output::Error("bug: invalid ynoicons");
-		glyph_bm = Bitmap::Create(12, 12);
-	}
-
-	enum class YnoIcons : char {
-		connection_3,
-		connection_2,
-		connection_1,
-		megaphone,
-		person,
-		compass,
-		globe,
-		map,
-		updown,
-		group,
-		crown,
-		wrench,
-		shield,
-	};
-
-	int RenderIcon(Bitmap& dst, int x, int y, YnoIcons icon_index, const Color& color, const Font& font) {
-		if (!ynoicons)
-			InitializeYnoIcons();
-
-		constexpr int dim = 12;
-		Rect icon_rect{ ((int)icon_index % 13) * dim, ((int)icon_index / 13) * dim, dim, dim};
-		glyph_bm->Clear();
-		glyph_bm->BlitFast(0, 0, *ynoicons, icon_rect, Opacity::Opaque());
-
-		// TODO: support for system theming a la fonts
-		double zoom = font.GetScaleRatio();
-		int dim_zoom = ceilf(zoom * dim);
-		Rect dst_rect{ x, y, dim_zoom, dim_zoom };
-		dst.MaskedBlit(dst_rect, *glyph_bm, 0, 0, color, 1 / zoom, 1 / zoom);
-		return dim_zoom;
-	}
 }
 
 ChatOverlay::ChatOverlay() : Drawable(Priority_Overlay, Drawable::Flags::Global | Drawable::Flags::Screenspace)
@@ -140,7 +91,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 	if (Scene::instance && Scene::instance->type == Scene::SceneType::Settings) return;
 
 	if (!dirty) {
-		dst.Blit(ox, oy, *bitmap, bitmap->GetRect(), 255);
+		dst.BlitFast(ox, oy, *bitmap, bitmap->GetRect(), Opacity::Opaque());
 		return;
 	}
 
@@ -152,7 +103,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 	auto& font = *Font::ChatText();
 	int text_height;
 	std::optional<Font::StyleScopeGuard> _guard;
-	if (LargeScreen()) {
+	if (OverlayUtils::LargeScreen()) {
 		Font::Style style{};
 		style.italic = true;
 		style.size = 33; // ChatTextHeight();
@@ -203,6 +154,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 	}
 
 	int y_offset = 0;
+	int message_max_minimized = OverlayUtils::LargeScreen() ? 4 : 2;
 
 	// we're doing the inverse of MessageOverlay: draw from the bottom up
 	for (auto message = messages.rbegin() + viewport; message != messages.rend(); ++message) {
@@ -219,7 +171,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 				message->text,
 				bitmap->width(),
 				[&](lcf::Span<std::shared_ptr<ChatComponent>> line) {
-					if (first) {	
+					if (first) {
 						first = false;
 						// we added the username as a virtual span, so now we remove it.
 						if (line[0]->Downcast<ChatComponents::Header>())
@@ -244,7 +196,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 
 				// expand messages with only emojis
 				if (std::all_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Emoji>()); })) {
-					line_height = LargeScreen() ? 56 : 18;
+					line_height = OverlayUtils::LargeScreen() ? 56 : 18;
 				}
 
 				// end override line height
@@ -259,7 +211,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 				if (std::next(line) == lines.rend() && EP_LIKELY(has_header)) {
 					// draw the username
 					if (message->global)
-						offset += RenderIcon(*bitmap, offset, y, YnoIcons::megaphone, offwhite, font);
+						offset += Icons::RenderIcon(*bitmap, offset, y, Icons::YnoIcons::megaphone, offwhite, font);
 					offset += Text::Draw(*bitmap, offset, y, font, offwhite, message->account ? "[" : "<").x;
 					offset += Text::Draw(*bitmap, offset, y, font, *message->system_bm, 0, message->sender).x;
 					if (message->badge) {
@@ -268,9 +220,9 @@ void ChatOverlay::Draw(Bitmap& dst) {
 					}
 					switch (message->rank) {
 					case 1: // mod
-						offset += RenderIcon(*bitmap, offset, y, YnoIcons::shield, offwhite, font); break;
+						offset += Icons::RenderIcon(*bitmap, offset, y, Icons::YnoIcons::shield, offwhite, font); break;
 					case 2: // dev
-						offset += RenderIcon(*bitmap, offset, y, YnoIcons::wrench, offwhite, font); break;
+						offset += RenderIcon(*bitmap, offset, y, Icons::YnoIcons::wrench, offwhite, font); break;
 					}
 					offset += Text::Draw(*bitmap, offset, y, font, offwhite, message->account ? "] " : "> ").x;
 				}
@@ -303,7 +255,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 			++i;
 			lines.clear();
 		}
-		if (!show_all && i > message_max_minimized) break;
+		if (!show_all && lidx >= message_max_minimized) break;
 		if ((lidx + input_row_offset) * text_height + y_offset > y_end) break;
 	}
 
@@ -316,7 +268,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 		bitmap->FillRect({ bitmap->width() - dims.width, std::clamp(desired_y, 0, y_end - dims.height), scrollbar_width, (int)ceilf(scrollbar_height) }, scrollbar);
 	}
 
-	dst.Blit(ox, oy, *bitmap, bitmap->GetRect(), 255);
+	dst.BlitFast(ox, oy, *bitmap, bitmap->GetRect(), Opacity::Opaque());
 	dirty = false;
 }
 
@@ -398,6 +350,11 @@ void ChatOverlay::UpdateScene() {
 		DoScroll(3);
 	}
 
+	if (Input::IsRawKeyPressed(Input::Keys::ENDS)) {
+		scroll = 0;
+		MarkDirty();
+	}
+
 	if (!GMI().CanChat()) return;
 
 	// chat input only below this point
@@ -417,6 +374,7 @@ void ChatOverlay::UpdateScene() {
 		dirty = true;
 	}
 	if (Input::IsRawKeyTriggered(Input::Keys::RETURN) && !input.empty()) {
+		// TODO: map chat and party chat
 		std::string encoded = Utils::EncodeUTF(input);
 		GMI().sessionConn.SendPacket(Messages::C2S::SessionGSay{ std::move(encoded) });
 		input.clear();
@@ -437,9 +395,9 @@ void ChatOverlay::SetShowAll(bool show_all) {
 		else
 			Scene::Push(std::make_shared<Scene_Overlay>([this] { UpdateScene(); }));
 		Rect screen_rect = DisplayUi->GetScreenSurfaceRect();
-		int text_height = ChatTextHeight();
-		//Rect rect{ 0, screen_rect.height - text_height, screen_rect.width, text_height };
-		Rect rect{ -100, -100, screen_rect.width, text_height };
+		int text_height = OverlayUtils::ChatTextHeight();
+		Rect rect{ 0, screen_rect.height - text_height, screen_rect.width, text_height };
+		// Rect rect{ -100, -100, screen_rect.width, text_height };
 		DisplayUi->BeginTextCapture(&rect);
 	}
 	else
@@ -459,7 +417,7 @@ void ChatOverlay::OnResolutionChange() {
 		DrawableMgr::Register(this);
 	}
 
-	int text_height = ChatTextHeight();
+	int text_height = OverlayUtils::ChatTextHeight();
 	Rect rect = DisplayUi->GetScreenSurfaceRect();
 	bitmap = Bitmap::Create(rect.width, rect.height);
 	scrollbar_width = ceilf(0.008 * rect.width);
@@ -481,7 +439,7 @@ bool ChatOverlay::IsTriggeredOrRepeating(CustomKeyTimers key) {
 	}
 
 	if (Input::IsRawKeyPressed(timer.raw_key)) {
-		auto held_duration = now - timer.last_triggered;	
+		auto held_duration = now - timer.last_triggered;
 		if (held_duration >= timer.delay && (now - timer.last_repeated) >= timer.rate) {
 			timer.last_repeated = now;
 			return true;
@@ -496,7 +454,7 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 	std::vector<std::shared_ptr<ChatComponent>> out;
 	static std::regex pattern(":(\\w+):");
 
-	int text_height = ChatTextHeight();
+	int text_height = OverlayUtils::ChatTextHeight();
 	auto font = Font::ChatText();
 	Font::Style style{};
 	style.size = text_height;
@@ -505,7 +463,7 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 	out.emplace_back(std::make_shared<ChatComponent>([this, has_badge] {
 		auto& font = *Font::ChatText();
 		Rect rect = Text::GetSize(font, fmt::format("[{}] ", sender));
-		int square = ChatTextHeight();
+		int square = OverlayUtils::ChatTextHeight();
 		if (has_badge)
 			rect.width += square;
 		if (global)
@@ -529,7 +487,7 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 
 		auto emoji_key = match[1].str();
 		if (emojis.empty() || emojis.find(emoji_key) != emojis.end())
-			out.emplace_back(std::make_shared<ChatEmoji>(parent, ChatTextHeight(), ChatTextHeight(), emoji_key));
+			out.emplace_back(std::make_shared<ChatEmoji>(parent, OverlayUtils::ChatTextHeight(), OverlayUtils::ChatTextHeight(), emoji_key));
 		else
 			out.emplace_back(std::make_shared<ChatString>(match[0].str()));
 		last_end = match[0].second;

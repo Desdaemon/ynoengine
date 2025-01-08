@@ -34,6 +34,7 @@
 #ifdef PLAYER_YNO
 #  include <uv.h>
 #  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
 #  include "web_api.h"
 #endif
 
@@ -269,6 +270,7 @@ void Player::MainLoop() {
 		Graphics::GetMessageOverlay().Update();
 #ifdef PLAYER_YNO
 		Graphics::GetChatOverlay().Update();
+		Graphics::GetStatusOverlay().Update();
 #endif
 
 		++num_updates;

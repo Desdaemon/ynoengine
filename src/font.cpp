@@ -61,6 +61,7 @@
 #include "graphics.h"
 #ifdef PLAYER_YNO
 #  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
 #endif
 
 // Static variables.
@@ -718,6 +719,7 @@ void Font::SetChatText(FontRef new_chat_text) {
 	chat_text->SetFallbackFont(DefaultBitmapFont());
 #ifdef PLAYER_YNO
 	Graphics::GetChatOverlay().OnResolutionChange();
+	Graphics::GetStatusOverlay().OnResolutionChange();
 #endif
 }
 

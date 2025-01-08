@@ -320,6 +320,7 @@ void AsyncHandler::ClearRequests() {
 			++it;
 		}
 	}
+	async_requests.clear();
 	db_lastwrite = LLONG_MAX;
 }
 

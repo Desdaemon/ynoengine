@@ -426,6 +426,12 @@ namespace S2C {
 		std::string badge;
 		// TODO: Medals?
 	};
+	class SessionPlayerCount : public S2CPacket {
+	public:
+		SessionPlayerCount(const PL& v) :
+			player_count(Decode<int>(v.at(0))) {}
+		int player_count;
+	};
 #endif
 }
 namespace C2S {
