@@ -39,8 +39,9 @@ Scene_Nexus::Scene_Nexus() {
 	type = Scene::GameBrowser;
 }
 
-void Scene_Nexus::Start() {	
+void Scene_Nexus::Start() {
 	Main_Data::game_system = std::make_unique<Game_System>();
+	Main_Data::game_system->SetSystemGraphic(CACHE_DEFAULT_BITMAP, lcf::rpg::System::Stretch_stretch, lcf::rpg::System::Font_gothic);
 	Game_Clock::ResetFrame(Game_Clock::now());
 	InitWebview();
 }
@@ -67,6 +68,10 @@ void Scene_Nexus::Continue(SceneType) {
 	selected_game = "";
 
 	Font::ResetDefault();
+
+	Main_Data::game_system = std::make_unique<Game_System>();
+	Main_Data::game_system->SetSystemGraphic(CACHE_DEFAULT_BITMAP, lcf::rpg::System::Stretch_stretch, lcf::rpg::System::Font_gothic);
+
 	InitWebview();
 }
 
@@ -113,7 +118,8 @@ void Scene_Nexus::LaunchGame(StringView game) {
 
 	auto& webview = ((Sdl2Ui*)DisplayUi.get())->GetWebview();
 	webview.dispatch([&webview] {
-		webview.navigate(fmt::format("https://localhost:8028"));
+		// webview.navigate(fmt::format("https://localhost:8028"));
+		webview.navigate("https://playtest.ynoproject.net/dev");
 	});
 	DisplayUi->Dispatch(BaseUi::Intent::ToggleWebview); // hide the webview on entering the game
 	DisplayUi->SetWebviewLayout(BaseUi::WebviewLayout::Sidebar);

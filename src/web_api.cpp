@@ -9,8 +9,10 @@
 #    include "baseui.h"
 #    include "platform/sdl/sdl2_ui.h"
 #    include "output.h"
-#    include "multiplayer/game_multiplayer.h"
 #    include "player.h"
+#    include "graphics.h"
+#    include "multiplayer/game_multiplayer.h"
+#    include "multiplayer/status_overlay.h"
 #    define JS_EVAL(...) (DisplayUi ? ((Sdl2Ui*)DisplayUi.get())->GetWebview().dispatch([=]{ ((Sdl2Ui*)DisplayUi.get())->GetWebview().eval(fmt::format(__VA_ARGS__)); }) : webview::noresult{})
      using json = nlohmann::json;
 #  endif
@@ -22,8 +24,6 @@ using namespace Web_API;
 
 std::string Web_API::GetSocketURL() {
 #ifdef PLAYER_YNO
-	//return "wss://connect.ynoproject.net/2kki/";
-	//return "wss://localhost:8028/backend/2kki/";
 	std::string_view game = Player::emscripten_game_name;
 	if (game.empty())
 		game = "2kki";
@@ -215,7 +215,7 @@ void Web_API::InitializeBindings() {
 	w.bind("webviewSendSession", [](const std::string& args) -> std::string {
 		json args_ = json::parse(args);
 		GMI().sessionConn.Send((std::string)args_[0]);
-		return "";
+		return "null";
 	});
 	w.bind("webviewSessionToken", [](const std::string&) -> std::string {
 		if (GMI().session_token.empty())
@@ -224,6 +224,11 @@ void Web_API::InitializeBindings() {
 	});
 	GMI().sessionConn.RegisterRawHandler([](std::string_view name, std::string_view args) {
 		JS_EVAL(R"js( receiveSessionMessage("{}", `{}`) )js", name, args);
+	});
+	w.bind("webviewSetLocation", [](const std::string& args) -> std::string {
+		json args_ = json::parse(args);
+		Graphics::GetStatusOverlay().SetLocation(args_[0]);
+		return "null";
 	});
 #endif
 }

@@ -35,6 +35,7 @@
 #ifdef PLAYER_YNO
 #  include <uv.h>
 #  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
 #  include "web_api.h"
 #endif
 
@@ -263,6 +264,7 @@ void Player::MainLoop() {
 		Graphics::GetMessageOverlay().Update();
 #ifdef PLAYER_YNO
 		Graphics::GetChatOverlay().Update();
+		Graphics::GetStatusOverlay().Update();
 #endif
 
 		++num_updates;
@@ -1108,7 +1110,7 @@ void Player::LoadFonts() {
 	if (name_text) {
 		Font::SetNameText(Font::CreateFtFont(std::move(name_text), 11, false, false), false);
 	}
-	
+
 	auto chat_text = FileFinder::OpenFont("NameText");
 	if (chat_text) {
 		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 11, false, false));

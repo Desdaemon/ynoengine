@@ -30,6 +30,7 @@ class MessageOverlay;
 class Scene;
 #ifdef PLAYER_YNO
 class ChatOverlay;
+class StatusOverlay;
 #endif
 
 /**
@@ -56,9 +57,6 @@ namespace Graphics {
 
 	void LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z);
 
-	/** Screenspace drawables can put their resolution handlers here. Called after DisplayUi is done updating the surfaces. */
-	void OnResolutionChange();
-
 	std::shared_ptr<Scene> UpdateSceneCallback();
 
 	/**
@@ -70,6 +68,8 @@ namespace Graphics {
 	MessageOverlay& GetMessageOverlay();
 
 	ChatOverlay& GetChatOverlay();
+
+	StatusOverlay& GetStatusOverlay();
 }
 
 #endif

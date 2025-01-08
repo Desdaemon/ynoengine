@@ -165,6 +165,7 @@ private:
 	std::unique_ptr<webview::webview> webview;
 	std::thread webview_thread;
 	bool webview_visible = true;
+	bool webview_detach = false;
 	Rect webview_dims{};
 	void ModifyViewport();
 	void LayoutWebview();

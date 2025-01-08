@@ -79,7 +79,7 @@ void Window_StringInput::Update() {
 	}
 
 	if (Input::IsRawKeyTriggered(Input::Keys::BACKSPACE) && !value.empty()) {
-		value.pop_back();
+		value.clear();
 		dirty = true;
 	}
 	if (dirty)

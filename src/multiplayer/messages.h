@@ -119,7 +119,7 @@ namespace S2C {
 			facing(Decode<int>(v.at(1))) {}
 		const int facing;
 	};
-	
+
 	class SpeedPacket : public PlayerPacket {
 	public:
 		SpeedPacket(const PL& v)
@@ -149,7 +149,7 @@ namespace S2C {
 		const int p;
 		const int f;
 	};
-	
+
 	class RepeatingFlashPacket : public FlashPacket {
 	public:
 		RepeatingFlashPacket(const PL& v)
@@ -420,6 +420,12 @@ namespace S2C {
 		std::string systemName;
 		std::string badge;
 		// TODO: Medals?
+	};
+	class SessionPlayerCount : public S2CPacket {
+	public:
+		SessionPlayerCount(const PL& v) :
+			player_count(Decode<int>(v.at(0))) {}
+		int player_count;
 	};
 #endif
 }
