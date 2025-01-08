@@ -38,6 +38,8 @@
 
 #ifdef PLAYER_YNO
 #  include "multiplayer/scene_online.h"
+#  include "graphics.h"
+#  include "multiplayer/status_overlay.h"
 #endif
 
 constexpr int menu_command_width = 88;
@@ -58,11 +60,17 @@ void Scene_Menu::Start() {
 	// Status Window
 	menustatus_window.reset(new Window_MenuStatus(Player::menu_offset_x + menu_command_width, Player::menu_offset_y, (MENU_WIDTH - menu_command_width), MENU_HEIGHT));
 	menustatus_window->SetActive(false);
+#ifdef PLAYER_YNO
+	Graphics::GetStatusOverlay().MarkDirty(true);
+#endif
 }
 
 void Scene_Menu::Continue(SceneType /* prev_scene */) {
 	menustatus_window->Refresh();
 	gold_window->Refresh();
+#ifdef PLAYER_YNO
+	Graphics::GetStatusOverlay().MarkDirty(true);
+#endif
 }
 
 void Scene_Menu::vUpdate() {

@@ -502,6 +502,9 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/multiplayer/playerother.h
 	src/multiplayer/playerother.cpp
 	src/external/TinySHA1.hpp
+	src/icons.h
+	src/icons.cpp
+	src/multiplayer/overlay_utils.h
 
 	# to be upstreamed
 	src/window_stringinput.h
@@ -512,6 +515,8 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 	target_sources(${PROJECT_NAME} PRIVATE
 		src/multiplayer/chat_overlay.h
 		src/multiplayer/chat_overlay.cpp
+		src/multiplayer/status_overlay.h
+		src/multiplayer/status_overlay.cpp
 		src/multiplayer/scene_overlay.h
 		src/multiplayer/scene_overlay.cpp
 		src/multiplayer/scene_online.h
@@ -1079,12 +1084,14 @@ else()
 	#add_dependencies(${PROJECT_NAME} websocketpp::websocketpp)
 	#find_package(httplib CONFIG REQUIRED)
 	#target_link_libraries(${PROJECT_NAME} httplib::httplib)
-	# find_package(cpr CONFIG REQUIRED)
-	include(FetchContent)
-	FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
-	                         GIT_TAG dec9422db3af470641f8b0d90e4b451c4daebf64) # Replace with your desired git commit from: https://github.com/libcpr/cpr/releases
+	find_package(cpr CONFIG)
+	if(NOT cpr_FOUND)
+		include(FetchContent)
+		FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
+								GIT_TAG dec9422db3af470641f8b0d90e4b451c4daebf64) # Replace with your desired git commit from: https://github.com/libcpr/cpr/releases
 
-	FetchContent_MakeAvailable(cpr)
+		FetchContent_MakeAvailable(cpr)
+	endif()
 	target_link_libraries(${PROJECT_NAME} cpr::cpr)
 endif()
 
@@ -1269,7 +1276,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set(EXE_NAME ${PROJECT_NAME}_exe)
 		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 			add_executable(${EXE_NAME} "src/platform/emscripten/main.cpp")
-		#elseif(PLAYER_YNO)	
+		#elseif(PLAYER_YNO)
 			#add_executable(${EXE_NAME} "src/platform/ynoshell/main.cpp")
 		else()
 			add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")

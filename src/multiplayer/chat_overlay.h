@@ -99,12 +99,14 @@ class ChatOverlay : public Drawable {
 public:
 	ChatOverlay();
 	void Draw(Bitmap& dst) override;
+	void OnResolutionChange() override;
+
 	void Update();
+	/** Run by Scene_Overlay on behalf of this component. */
 	void UpdateScene();
 	ChatOverlayMessage& AddMessage(
 		std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "",
 		bool account = true, bool global = true, int rank = 0);
-	void OnResolutionChange() override;
 	void SetShowAll(bool show_all);
 	inline void SetShowAll() { SetShowAll(!show_all); }
 	inline bool ShowingAll() const noexcept { return show_all;  }
@@ -120,7 +122,6 @@ private:
 	int oy = 0;
 
 	int message_max = 200;
-	int message_max_minimized = 4;
 	int counter = 0;
 	int scroll = 0;
 	int scrollbar_width = 0;
@@ -159,11 +160,11 @@ inline void ChatOverlay::MarkDirty() noexcept { dirty = true; }
 class ChatString : public ChatComponent {
 	constexpr static Color default_color = Color(200, 200, 200, 255);
 public:
-	StringView string;
+	std::string string;
 	Color color;
 
 	ChatString(StringView other, Color color = default_color) : ChatComponent(0, 0, ChatComponents::String),
-		string(other), color(color) {}
+		string(ToString(other)), color(color) {}
 };
 
 class ChatEmoji : public ChatComponent {

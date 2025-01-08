@@ -32,6 +32,7 @@
 #include "game_clock.h"
 #ifdef PLAYER_YNO
 #  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
 #endif
 
 using namespace std::chrono_literals;
@@ -45,6 +46,7 @@ namespace Graphics {
 	std::unique_ptr<FpsOverlay> fps_overlay;
 #ifdef PLAYER_YNO
 	std::unique_ptr<ChatOverlay> chat_overlay;
+	std::unique_ptr<StatusOverlay> status_overlay;
 #endif
 
 	std::string window_title_key;
@@ -57,12 +59,14 @@ void Graphics::Init() {
 	message_overlay = std::make_unique<MessageOverlay>();
 	fps_overlay = std::make_unique<FpsOverlay>();
 	chat_overlay = std::make_unique<ChatOverlay>();
+	status_overlay = std::make_unique<StatusOverlay>();
 }
 
 void Graphics::Quit() {
 	fps_overlay.reset();
 	message_overlay.reset();
 	chat_overlay.reset();
+	status_overlay.reset();
 
 	Cache::ClearAll();
 
@@ -139,12 +143,6 @@ void Graphics::LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, D
 	drawable_list.Draw(dst, dst_screen, min_z, max_z);
 }
 
-void Graphics::OnResolutionChange() {
-#ifdef PLAYER_YNO
-	Graphics::GetChatOverlay().OnResolutionChange();
-#endif
-}
-
 std::shared_ptr<Scene> Graphics::UpdateSceneCallback() {
 	auto prev_scene = current_scene;
 	current_scene = Scene::instance;
@@ -169,5 +167,9 @@ MessageOverlay& Graphics::GetMessageOverlay() {
 #ifdef PLAYER_YNO
 ChatOverlay& Graphics::GetChatOverlay() {
 	return *chat_overlay;
+}
+
+StatusOverlay& Graphics::GetStatusOverlay() {
+	return *status_overlay;
 }
 #endif

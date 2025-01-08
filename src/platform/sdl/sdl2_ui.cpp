@@ -247,6 +247,9 @@ Sdl2Ui::~Sdl2Ui() {
 	if (webview) {
 		webview->terminate();
 		webview_thread.join();
+		// webview doesn't terminate cleanly, but it will be closed alongside
+		// the main process anyway
+		webview.release();
 	}
 	SDL_Quit();
 }
@@ -762,7 +765,7 @@ void Sdl2Ui::UpdateDisplay() {
 			if (!sdl_texture_scaled) {
 				Output::Debug("SDL_CreateTexture failed : {}", SDL_GetError());
 			}
-		}	
+		}
 		if (sdl_texture_screen)
 			SDL_DestroyTexture(sdl_texture_screen);
 		sdl_texture_screen = SDL_CreateTexture(sdl_renderer, texture_format, SDL_TEXTUREACCESS_STREAMING,
@@ -1519,13 +1522,22 @@ void Sdl2Ui::Dispatch(Intent intent) {
 #ifdef _WIN32
 		HWND hwnd = (HWND&)webview->window().value();
 		ShowWindow(hwnd, webview_visible ? SW_SHOW : SW_HIDE);
-		SDL_RaiseWindow(sdl_window);
-#endif
 		if (webview_visible)
 			LayoutWebview();
+		SDL_RaiseWindow(sdl_window);
+#endif
 	} break;
 	case Intent::ToggleDetachWebview: {
-		// nothing yet
+		webview_detach = !webview_detach;
+#ifdef _WIN32
+		HWND hwnd = (HWND&)webview->window().value();
+		if (webview_detach) {
+			SetParent(hwnd, nullptr);
+		} else {
+			HWND parent = GetWindowHandle(sdl_window);
+			SetParent(hwnd, parent);
+		}
+#endif
 	} break;
 	}
 }
@@ -1542,7 +1554,7 @@ void Sdl2Ui::SetWebviewLayout(WebviewLayout layout) {
 void Sdl2Ui::ModifyViewport() {
 	switch (webview_layout) {
 	case WebviewLayout::Sidebar: {
-		webview_dims = { window.width - 800, 0, 800, window.height };
+		webview_dims = { std::max(0, window.width - 800), 0, std::min(800, window.width), window.height };
 	} break;
 	case WebviewLayout::Expanded: {
 		webview_dims = { 0, 0, window.width, window.height };
