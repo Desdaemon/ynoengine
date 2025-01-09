@@ -32,6 +32,8 @@
 #include "game_config.h"
 #include "game_clock.h"
 #include "input.h"
+#include "bitmap.h"
+#include "drawable.h"
 
 #ifdef SUPPORT_AUDIO
 struct AudioInterface;
@@ -132,6 +134,8 @@ public:
 	/** @return dimensions of the window */
 	virtual Rect GetWindowMetrics() const;
 
+	Rect GetScreenSurfaceRect() const;
+
 	/**
 	 * Gets client width size.
 	 *
@@ -169,7 +173,9 @@ public:
 	std::array<Input::TouchInput, 5>& GetTouchInput();
 
 	BitmapRef const& GetDisplaySurface() const;
+	BitmapRef const& GetScreenSurface() const;
 	BitmapRef& GetDisplaySurface();
+	BitmapRef& GetScreenSurface();
 
 	/**
 	 * Requests a resolution change of the framebuffer.
@@ -259,6 +265,24 @@ public:
 	 */
 	Game_ConfigVideo GetConfig() const;
 
+	/** Enables receiving input from IME. Meant to be paired with EndTextCapture. */
+	virtual void BeginTextCapture(Rect* textbox = nullptr) {}
+	virtual void EndTextCapture() {}
+
+	enum class Intent : char {
+		ToggleWebview,
+		ToggleDetachWebview,
+	};
+
+	/** Entrypoint for special actions that UI implementations may opt in. */
+	virtual void Dispatch(Intent) {}
+
+	enum class WebviewLayout : char {
+		Sidebar,
+		Expanded,
+	};
+
+	virtual void SetWebviewLayout(WebviewLayout layout);
 protected:
 	/**
 	 * Protected Constructor. Use CreateUi instead.
@@ -293,6 +317,9 @@ protected:
 	/** Surface used for zoom. */
 	BitmapRef main_surface;
 
+	/** Screen-sized surface. */
+	BitmapRef screen_surface = nullptr;
+
 	/** Mouse position on screen relative to the window. */
 	Point mouse_pos;
 
@@ -322,6 +349,8 @@ protected:
 
 	/** Used by the F2 toggle: Remembers which configuration (ON or Overlay) was used */
 	ConfigEnum::ShowFps original_fps_show_state = ConfigEnum::ShowFps::OFF;
+
+	WebviewLayout webview_layout = WebviewLayout::Sidebar;
 };
 
 /** Global DisplayUi variable. */
@@ -329,6 +358,10 @@ extern std::shared_ptr<BaseUi> DisplayUi;
 
 inline Rect BaseUi::GetWindowMetrics() const {
 	return {-1, -1, -1, -1};
+}
+
+inline Rect BaseUi::GetScreenSurfaceRect() const {
+	return GetScreenSurface()->GetRect();
 }
 
 inline bool BaseUi::IsFrameRateSynchronized() const {
@@ -357,6 +390,14 @@ inline BitmapRef const& BaseUi::GetDisplaySurface() const {
 
 inline BitmapRef& BaseUi::GetDisplaySurface() {
 	return main_surface;
+}
+
+inline BitmapRef const& BaseUi::GetScreenSurface() const {
+	return screen_surface ? screen_surface : main_surface;
+}
+
+inline BitmapRef& BaseUi::GetScreenSurface() {
+	return screen_surface ? screen_surface : main_surface;
 }
 
 inline bool BaseUi::vChangeDisplaySurfaceResolution(int new_width, int new_height) {
@@ -428,5 +469,7 @@ inline void BaseUi::SetFrameLimit(int fps_limit) {
 
 	frame_limit = (fps_limit == 0 ? Game_Clock::duration(0) : Game_Clock::TimeStepFromFps(fps_limit));
 }
+
+inline void BaseUi::SetWebviewLayout(WebviewLayout layout) { webview_layout = layout; }
 
 #endif

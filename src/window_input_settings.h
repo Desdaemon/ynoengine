@@ -24,6 +24,7 @@
 #include "input_buttons.h"
 #include "window_numberinput.h"
 #include "window_selectable.h"
+#include "window_stringinput.h"
 
 /**
  * Window_InputSettings class.

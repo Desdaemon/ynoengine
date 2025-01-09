@@ -124,7 +124,7 @@ void Window_Base::DrawActorTitle(const Game_Actor& actor, int cx, int cy) const 
 }
 
 void Window_Base::DrawActorClass(const Game_Actor& actor, int cx, int cy) const {
-	contents->TextDraw(cx, cy, Font::ColorDefault, actor.GetClassName());
+	contents->TextDraw(cx, cy, Font::ColorDefault, actor.ClassName());
 }
 
 void Window_Base::DrawActorLevel(const Game_Actor& actor, int cx, int cy) const {

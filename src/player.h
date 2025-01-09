@@ -423,10 +423,10 @@ namespace Player {
 	/** game specific configuration */
 	extern Game_ConfigGame game_config;
 
-#ifdef EMSCRIPTEN
+	extern std::function<void(Game_Config&)> did_parse_config;
+
 	/** Name of game emscripten uses */
 	extern std::string emscripten_game_name;
-#endif
 }
 
 inline bool Player::IsRPG2k() {
@@ -494,7 +494,8 @@ inline bool Player::IsPatchKeyPatch() {
 }
 
 inline bool Player::HasEasyRpgExtensions() {
-	return game_config.patch_easyrpg.Get();
+	return true;
+	//return game_config.patch_easyrpg.Get();
 }
 
 inline bool Player::IsCollectiveUnconscious() {

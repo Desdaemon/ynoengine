@@ -18,9 +18,35 @@
 #include "drawable.h"
 #include <lcf/rpg/savepicture.h>
 #include "drawable_mgr.h"
+#include "baseui.h"
+#include "player.h"
+
+std::vector<Drawable*> Drawable::screen_drawables;
+
+Drawable::Drawable(Z_t z, Flags flags)
+	: _z(z),
+	_flags(flags)
+{
+	if (IsScreenspace())
+		screen_drawables.emplace_back(this);
+}
 
 Drawable::~Drawable() {
 	DrawableMgr::Remove(this);
+	Drawable* items[]{ this };
+	RemoveScreenDrawable(items);
+}
+
+void Drawable::RemoveScreenDrawable(lcf::Span<Drawable*> container) {
+	if (container.empty() || !DisplayUi) return;
+	for (auto to_remove = screen_drawables.begin(); to_remove != screen_drawables.end(); ++to_remove) {
+		for (auto& it : container) {
+			if (&*to_remove == &it) {
+				screen_drawables.erase(to_remove);
+				break;
+			}
+		}
+	}
 }
 
 void Drawable::SetZ(Z_t nz) {

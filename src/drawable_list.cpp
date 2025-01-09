@@ -32,6 +32,7 @@ DrawableList::~DrawableList() {
 }
 
 void DrawableList::Clear() {
+	Drawable::RemoveScreenDrawable(lcf::MakeSpan(_list));
 	_list.clear();
 	SetClean();
 }
@@ -107,6 +108,27 @@ void DrawableList::Draw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z) {
 		}
 		if (drawable->IsVisible()) {
 			drawable->Draw(dst);
+		}
+	}
+}
+
+void DrawableList::Draw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z) {
+	if (IsDirty()) {
+		Sort();
+	} else {
+		assert(IsSorted());
+	}
+
+	for (auto* drawable : _list) {
+		auto z = drawable->GetZ();
+		if (z < min_z) {
+			continue;
+		}
+		if (z > max_z) {
+			break;
+		}
+		if (drawable->IsVisible()) {
+			drawable->Draw(drawable->IsScreenspace() ? dst_screen : dst);
 		}
 	}
 }

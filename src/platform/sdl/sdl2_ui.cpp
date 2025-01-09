@@ -17,13 +17,15 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+
 #include "game_config.h"
 #include "system.h"
 #include "sdl2_ui.h"
 
+#include <SDL_syswm.h>
+
 #ifdef _WIN32
 #  include <windows.h>
-#  include <SDL_syswm.h>
 #  include <dwmapi.h>
 #elif defined(__ANDROID__)
 #  include <jni.h>
@@ -33,6 +35,9 @@
 #  include "platform/emscripten/audio.h"
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
+#elif defined(GTK_MAJOR_VERSION)
+#  include <gtk/gtk.h>
+#  include <gdk/gdk.h>
 #endif
 #include "icon.h"
 
@@ -43,6 +48,7 @@
 #include "player.h"
 #include "bitmap.h"
 #include "lcf/scope_guard.h"
+#include "web_api.h"
 
 #if defined(__APPLE__) && TARGET_OS_OSX
 #  include "platform/macos/macos_utils.h"
@@ -135,8 +141,7 @@ static uint32_t SelectFormat(const SDL_RendererInfo& rinfo, bool print_all) {
 	return current_fmt;
 }
 
-#ifdef _WIN32
-HWND GetWindowHandle(SDL_Window* window) {
+auto GetWindowHandle(SDL_Window* window) {
 	SDL_SysWMinfo wminfo;
 	SDL_VERSION(&wminfo.version)
 		SDL_bool success = SDL_GetWindowWMInfo(window, &wminfo);
@@ -144,9 +149,16 @@ HWND GetWindowHandle(SDL_Window* window) {
 	if (success < 0)
 		Output::Error("Wrong SDL version");
 
+#if defined(SDL_VIDEO_DRIVER_WINDOWS)
 	return wminfo.info.win.window;
-}
+#elif defined(SDL_VIDEO_DRIVER_X11)
+	return std::make_pair(wminfo.info.x11.display, wminfo.info.x11.window);
+#elif defined(SDL_VIDEO_DRIVER_WAYLAND)
+	// return std::make_pair(wminfo);
+#else
+#  error not implemented on this platform
 #endif
+}
 
 static int FilterUntilFocus(const SDL_Event* evnt);
 
@@ -229,6 +241,13 @@ Sdl2Ui::~Sdl2Ui() {
 	}
 	if (sdl_window) {
 		SDL_DestroyWindow(sdl_window);
+	}
+	if (webview) {
+		webview->terminate();
+		webview_thread.join();
+		// webview doesn't terminate cleanly, but it will be closed alongside
+		// the main process anyway
+		webview.release();
 	}
 	SDL_Quit();
 }
@@ -361,6 +380,13 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 		#endif
 
+		// Some hints that need to be set even before the window is created
+		// courtesy of https://github.com/etorth/mir2x/issues/48#issuecomment-2536136453
+		#ifdef SDL_HINT_IME_SUPPORT_EXTENDED_TEXT
+		SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
+		#endif
+		SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
+
 		// Create our window
 		if (vcfg.window_x.Get() < 0 || vcfg.window_y.Get() < 0 || vcfg.window_height.Get() <= 0 || vcfg.window_width.Get() <= 0) {
 			sdl_window = SDL_CreateWindow(GAME_TITLE,
@@ -446,15 +472,52 @@ bool Sdl2Ui::RefreshDisplayMode() {
 			return false;
 		}
 
+		void* display;
 #ifdef _WIN32
-		HWND window = GetWindowHandle(sdl_window);
+		HWND hwnd = GetWindowHandle(sdl_window);
 		// Not using the enum names because this will fail to build when not using a recent Windows 11 SDK
 		int window_rounding = 1; // DWMWCP_DONOTROUND
-		DwmSetWindowAttribute(window, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
+		DwmSetWindowAttribute(hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &window_rounding, sizeof(window_rounding));
+#elif defined(_X11_XLIB_H_)
+		XID hwnd;
+		std::tie(display, hwnd) = GetWindowHandle(sdl_window);
 #endif
 
 		renderer_sg.Dismiss();
 		window_sg.Dismiss();
+#ifdef PLAYER_YNO
+		webview_thread = std::thread([hwnd, display, this] {
+			try {
+				webview = std::make_unique<webview::webview>(true, nullptr);
+				auto& w = *webview;
+				w.set_title("YNOproject sidecar");
+				w.set_size(window.width, window.height, WEBVIEW_HINT_NONE);
+				if (auto widget = w.window(); widget.ok()) {
+#ifdef _WIN32
+					HWND childHwnd = (HWND)widget.value();
+					SetParent(childHwnd, hwnd);
+					//auto styles = GetWindowLongPtr(childHwnd, GWL_STYLE);
+					auto styles = GW_CHILD;
+					SetWindowLongPtr(childHwnd, GWL_STYLE, styles);
+					RECT rect{ 0, 0, 800, window.height };
+					AdjustWindowRectEx(&rect, styles, false, 0);
+					SetWindowPos(childHwnd, nullptr,
+						window.width - 800, 0,
+						rect.right - rect.left,
+						rect.bottom - rect.top,
+						SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+#else
+					GtkWidget* childHandle = (GtkWidget*&)widget.value();
+#endif
+				}
+				Web_API::InitializeBindings();
+				w.run();
+			}
+			catch (const webview::exception& err) {
+				Output::Error("webview died: {}", (int)err.error().code());
+			}
+		});
+#endif // PLAYER_YNO
 	} else {
 		// Browser handles fast resizing for emscripten, TODO: use fullscreen API
 #ifndef EMSCRIPTEN
@@ -471,6 +534,8 @@ bool Sdl2Ui::RefreshDisplayMode() {
 				SDL_SetWindowSize(sdl_window, display_width_zoomed, display_height_zoomed);
 			}
 		}
+		// TODO: Conditionally request focus only if previously held
+		SDL_RaiseWindow(sdl_window);
 #endif
 	}
 	// Need to set up icon again, some platforms recreate the window when
@@ -492,6 +557,11 @@ bool Sdl2Ui::RefreshDisplayMode() {
 		// Drawing surface will be the window itself
 		main_surface = Bitmap::Create(
 			display_width, display_height, Color(0, 0, 0, 255));
+	}
+
+	if (!screen_surface) {
+		int scale = window.scale ? static_cast<int>(ceilf(window.scale)) : 1;
+		screen_surface = Bitmap::Create(scale * display_width, scale * display_height, true, main_surface->pitch());
 	}
 
 	return true;
@@ -627,6 +697,7 @@ void Sdl2Ui::UpdateDisplay() {
 				viewport.x = 0;
 				viewport.w = window.width;
 			}
+			ModifyViewport();
 		};
 
 		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Integer) {
@@ -674,7 +745,14 @@ void Sdl2Ui::UpdateDisplay() {
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
 
-		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear && window.scale > 0.f) {
+		if (webview && webview_visible) {
+			LayoutWebview();
+		}
+
+		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
+
+		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear &&
+			window.scale > 0.f) {
 			if (sdl_texture_scaled) {
 				SDL_DestroyTexture(sdl_texture_scaled);
 			}
@@ -686,6 +764,17 @@ void Sdl2Ui::UpdateDisplay() {
 				Output::Debug("SDL_CreateTexture failed : {}", SDL_GetError());
 			}
 		}
+		if (sdl_texture_screen)
+			SDL_DestroyTexture(sdl_texture_screen);
+		sdl_texture_screen = SDL_CreateTexture(sdl_renderer, texture_format, SDL_TEXTUREACCESS_STREAMING,
+			screen_surface->width(), screen_surface->height());
+		if (!sdl_texture_screen)
+			Output::Warning("failed to create screen texture: {}", SDL_GetError());
+		else
+			Output::Debug("sdl_texture_screen: {}", SDL_GetPixelFormatName(texture_format));
+
+		for (auto& it : Drawable::screen_drawables)
+			it->OnResolutionChange();
 	}
 
 	SDL_RenderClear(sdl_renderer);
@@ -697,9 +786,26 @@ void Sdl2Ui::UpdateDisplay() {
 
 		SDL_SetRenderTarget(sdl_renderer, nullptr);
 		SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
-	} else {
+	}
+	//else if (screen_surface && sdl_texture_screen) {
+
+	//	SDL_SetRenderTarget(sdl_renderer, sdl_texture_scaled);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
+
+	//	SDL_SetRenderTarget(sdl_renderer, nullptr);
+	//	SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
+	//}
+	else {
 		SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
 	}
+
+	if (screen_surface && sdl_texture_screen) {
+		SDL_UpdateTexture(sdl_texture_screen, nullptr, screen_surface->pixels(), screen_surface->pitch());
+		SDL_SetTextureBlendMode(sdl_texture_screen, SDL_BLENDMODE_BLEND);
+		SDL_RenderCopy(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
+	}
+
 	SDL_RenderPresent(sdl_renderer);
 }
 
@@ -730,6 +836,20 @@ bool Sdl2Ui::HandleErrorOutput(const std::string &message) {
 	}
 
 	return true;
+}
+
+void Sdl2Ui::BeginTextCapture(Rect* textbox) {
+	SDL_RaiseWindow(sdl_window);
+	if (textbox) {
+		auto& box = *textbox;
+		SDL_Rect rect{ box.x, box.y, box.width, box.height };
+		SDL_SetTextInputRect(&rect);
+	}
+	SDL_StartTextInput();
+}
+
+void Sdl2Ui::EndTextCapture() {
+	SDL_StopTextInput();
 }
 
 void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
@@ -785,6 +905,14 @@ void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
 		case SDL_FINGERMOTION:
 			ProcessFingerEvent(evnt);
 			return;
+
+		case SDL_TEXTINPUT:
+		case SDL_TEXTEDITING:
+#ifdef SDL_TEXTEDITING_EXT
+		case SDL_TEXTEDITING_EXT:
+#endif
+			ProcessTextEditEvent(evnt);
+			break;
 	}
 }
 
@@ -1048,6 +1176,39 @@ void Sdl2Ui::ProcessFingerEvent(SDL_Event& evnt) {
 	/* unused */
 	(void) evnt;
 #endif
+}
+
+void Sdl2Ui::ProcessTextEditEvent(SDL_Event& event) {
+	if (event.type != SDL_TEXTINPUT) {
+		auto& composition = Input::composition;
+		composition.text.clear();
+
+#ifdef SDL_TEXTEDITING_EXT
+		if (event.type == SDL_TEXTEDITING_EXT) {
+			composition.text.append(event.editExt.text);
+			composition.sel_start = event.editExt.start;
+			composition.sel_length = event.editExt.length;
+			SDL_free(event.editExt.text);
+		}
+		else
+#endif
+		{
+			composition.text.append(event.edit.text);
+			composition.sel_start = event.edit.start;
+			composition.sel_length = event.edit.length;
+		}
+
+		if (composition.text.empty()) {
+			composition.active = false;
+			return;
+		}
+
+		composition.active = true;
+		return;
+	}
+
+	Input::text_input.clear();
+	Input::text_input.append(event.text.text);
 }
 
 void Sdl2Ui::SetAppIcon() {
@@ -1339,5 +1500,66 @@ bool Sdl2Ui::OpenURL(StringView url) {
 #else
 	Output::Warning("Cannot Open URL: SDL2 version too old (must be 2.0.14)");
 	return false;
+#endif
+}
+
+void Sdl2Ui::Dispatch(Intent intent) {
+	switch (intent) {
+	case Intent::ToggleWebview: {
+		webview_visible = !webview_visible;
+#ifdef _WIN32
+		HWND hwnd = (HWND&)webview->window().value();
+		ShowWindow(hwnd, webview_visible ? SW_SHOW : SW_HIDE);
+		if (webview_visible)
+			LayoutWebview();
+		SDL_RaiseWindow(sdl_window);
+#endif
+	} break;
+	case Intent::ToggleDetachWebview: {
+		webview_detach = !webview_detach;
+#ifdef _WIN32
+		HWND hwnd = (HWND&)webview->window().value();
+		if (webview_detach) {
+			SetParent(hwnd, nullptr);
+		} else {
+			HWND parent = GetWindowHandle(sdl_window);
+			SetParent(hwnd, parent);
+		}
+#endif
+	} break;
+	}
+}
+
+void Sdl2Ui::SetWebviewLayout(WebviewLayout layout) {
+	BaseUi::SetWebviewLayout(layout);
+	ModifyViewport();
+	if (layout == WebviewLayout::Expanded && !webview_visible)
+		webview_visible = true;
+	if (webview_visible)
+		LayoutWebview();
+}
+
+void Sdl2Ui::ModifyViewport() {
+	switch (webview_layout) {
+	case WebviewLayout::Sidebar: {
+		webview_dims = { std::max(0, window.width - 800), 0, std::min(800, window.width), window.height };
+	} break;
+	case WebviewLayout::Expanded: {
+		webview_dims = { 0, 0, window.width, window.height };
+	} break;
+	}
+}
+
+void Sdl2Ui::LayoutWebview() {
+	if (!webview) return;
+#ifdef _WIN32
+	HWND hwnd = (HWND&)webview->window().value();
+	RECT rect{ 0, 0, webview_dims.width, webview_dims.height };
+	SetWindowPos(hwnd, nullptr,
+		webview_dims.x, webview_dims.y,
+		rect.right - rect.left,
+		rect.bottom - rect.top,
+		SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+#else
 #endif
 }
