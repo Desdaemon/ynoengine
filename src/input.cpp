@@ -52,7 +52,7 @@ namespace Input {
 	std::bitset<BUTTON_COUNT> triggered, repeated, released;
 	Input::KeyStatus raw_triggered, raw_pressed, raw_released;
 	Composition composition{};
-	std::string text_input;
+	std::string text_input = "";
 	int dir4;
 	int dir8;
 	std::unique_ptr<Source> source;

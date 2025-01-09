@@ -22,6 +22,7 @@
 #include <deque>
 #include <lcf/span.h>
 #include <chrono>
+#include <uv.h>
 
 #include "drawable.h"
 #include "bitmap.h"
@@ -29,11 +30,13 @@
 #include "async_handler.h"
 #include "game_clock.h"
 #include "input.h"
+#include "point.h"
 
 enum ChatComponents {
 	Box,
 	String,
 	Emoji,
+	Screenshot,
 	// no associated components
 	Header,
 	END
@@ -71,10 +74,11 @@ inline Point ChatComponent::GetSize() const {
 class ChatOverlayMessage {
 public:
 	ChatOverlayMessage(
-		ChatOverlay* parent, std::string text, std::string sender, std::string system, std::string badge, bool account, bool global, int rank);
+		ChatOverlay* parent, std::string text, std::string sender, std::string sender_uuid, std::string system, std::string badge, bool account, bool global, int rank);
 	std::string text_orig;
 	std::vector<std::shared_ptr<ChatComponent>> text;
 	std::string sender;
+	std::string sender_uuid;
 	std::string system;
 	BitmapRef system_bm;
 	BitmapRef badge;
@@ -105,7 +109,7 @@ public:
 	/** Run by Scene_Overlay on behalf of this component. */
 	void UpdateScene();
 	ChatOverlayMessage& AddMessage(
-		std::string_view msg, std::string_view sender, std::string_view system = "", std::string_view badge = "",
+		std::string_view msg, std::string_view sender, std::string_view sender_uuid, std::string_view system = "", std::string_view badge = "",
 		bool account = true, bool global = true, int rank = 0);
 	void SetShowAll(bool show_all);
 	inline void SetShowAll() { SetShowAll(!show_all); }
@@ -182,12 +186,16 @@ class ChatScreenshot : public ChatComponent {
 public:
 	bool spoiler;
 	bool temp;
+	std::string uuid;
 	std::string id;
 	BitmapRef bitmap = nullptr;
 	FileRequestBinding request = nullptr;
 	ChatOverlay* parent = nullptr;
 
-	ChatScreenshot(ChatOverlay* parent, std::string id, bool temp, bool spoiler);
+	ChatScreenshot(ChatOverlay* parent, std::string uuid, std::string id, bool temp, bool spoiler);
+	static Point sizer();
+private:
+	uv_work_t task{};
 };
 
 
@@ -199,6 +207,8 @@ template<>
 struct ChatComponentsMap<ChatComponents::Emoji> { using type = ChatEmoji; };
 template<>
 struct ChatComponentsMap<ChatComponents::Header> { using type = ChatComponent; };
+template<>
+struct ChatComponentsMap<ChatComponents::Screenshot> { using type = ChatScreenshot; };
 
 template<ChatComponents Wanted>
 inline typename ChatComponentsMap<Wanted>::type* ChatComponent::Downcast() {

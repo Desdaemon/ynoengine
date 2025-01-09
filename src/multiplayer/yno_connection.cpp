@@ -13,7 +13,7 @@
 #  include <thread>
 #  include <uv.h>
 #  include <cpr/cpr.h>
-#  if defined(_WIN32)
+#  if defined(_MSC_VER)
 #    include <synchapi.h>
 #  elif defined(__linux__)
 #    include <linux/futex.h>
@@ -382,7 +382,7 @@ void YNOConnection::Open(std::string_view uri) {
 		if (!self->IsConnected()) return;
 		self->Close();
 		bool expected_value = false;
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 		if (!WaitOnAddress(self->ConnectedFutex(), &expected_value, sizeof(expected_value), INFINITE))
 			Output::Debug("Failed to wait for previous session to close: {}", GetLastError());
 #else
