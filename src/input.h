@@ -346,9 +346,9 @@ namespace Input {
 	public:
 		/** if false, all other fields are considered garbage */
 		bool active = false;
-		std::string text;
-		int sel_start;
-		int sel_length;
+		std::string text = "";
+		int sel_start = 0;
+		int sel_length = 0;
 	};
 
 	/** The current composition received from IME */

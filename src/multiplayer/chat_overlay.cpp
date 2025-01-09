@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
+#include "multiplayer/overlay_utils.h"
 #include <algorithm>
 #include <regex>
 
@@ -199,6 +200,10 @@ void ChatOverlay::Draw(Bitmap& dst) {
 					line_height = OverlayUtils::LargeScreen() ? 56 : 18;
 				}
 
+				if (std::any_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Screenshot>()); })) {
+					line_height = ChatScreenshot::sizer().y;
+				}
+
 				// end override line height
 
 				y_offset += line_height - text_height;
@@ -226,26 +231,40 @@ void ChatOverlay::Draw(Bitmap& dst) {
 					}
 					offset += Text::Draw(*bitmap, offset, y, font, offwhite, message->account ? "] " : "> ").x;
 				}
+				int baseline = 0;
 				for (auto& span : *line) {
 					if (auto str = span->Downcast<ChatComponents::String>()) {
-						offset += Text::Draw(*bitmap, offset, y, font, str->color, str->string).x;
+						offset += Text::Draw(*bitmap, offset, y + (baseline ? baseline - text_height : 0), font, str->color, str->string).x;
 					}
 					else if (auto emoji = span->Downcast<ChatComponents::Emoji>()) {
 						Point dims = emoji->GetSize();
+						int comp_y = y + (baseline ? baseline - text_height : 0);
 						if (emoji->bitmap) {
 							double zoom = emoji->bitmap->GetRect().y / (double)text_height;
-							bitmap->StretchBlit({offset, y, line_height, line_height}, *emoji->bitmap, emoji->bitmap->GetRect(), 255);
+							bitmap->StretchBlit({offset, comp_y, line_height, line_height}, *emoji->bitmap, emoji->bitmap->GetRect(), 255);
 						}
 						else {
 							// the emoji is still live, request it now
 							emoji->RequestBitmap(this);
-							bitmap->FillRect({ offset, y, line_height, line_height }, offwhite);
+							bitmap->FillRect({ offset, comp_y, line_height, line_height }, offwhite);
 						}
 						offset += line_height;
 					}
+					else if (auto screenshot = span->Downcast<ChatComponents::Screenshot>()) {
+						Point dims = screenshot->GetSize();
+						if (screenshot->bitmap) {
+							double zoom = screenshot->bitmap->GetRect().y / (double)text_height;
+							bitmap->StretchBlit({offset, y, dims.x, dims.y}, *screenshot->bitmap, screenshot->bitmap->GetRect(), 255);
+						}
+						else {
+							bitmap->FillRect({ offset, y, dims.x, dims.y }, offwhite);
+						}
+						offset += dims.x;
+						baseline = std::max(baseline, dims.y);
+					}
 					else if (auto box = span->Downcast<ChatComponents::Box>()) {
 						int width = box->GetSize().x;
-						bitmap->FillRect({ offset, y, width, text_height }, offwhite);
+						bitmap->FillRect({ offset, y + (baseline ? baseline - text_height : 0), width, text_height }, offwhite);
 						offset += width;
 					}
 				}
@@ -273,11 +292,11 @@ void ChatOverlay::Draw(Bitmap& dst) {
 }
 
 ChatOverlayMessage& ChatOverlay::AddMessage(
-	std::string_view message, std::string_view sender, std::string_view system, std::string_view badge,
+	std::string_view message, std::string_view sender, std::string_view sender_uuid, std::string_view system, std::string_view badge,
 	bool account, bool global, int rank) {
 	counter = 0;
 
-	auto& ret = messages.emplace_back(this, std::string(message), std::string(sender), std::string(system), std::string(badge), account, global, rank);
+	auto& ret = messages.emplace_back(this, std::string(message), std::string(sender), std::string(sender_uuid), std::string(system), std::string(badge), account, global, rank);
 
 	while (messages.size() > message_max) {
 		messages.pop_front();
@@ -291,7 +310,7 @@ ChatOverlayMessage& ChatOverlay::AddMessage(
 }
 
 void ChatOverlay::AddSystemMessage(StringView msg) {
-	auto& chatmsg = messages.emplace_back(this, std::string(msg), std::string(""), "", std::string(""), false, true, 0);
+	auto& chatmsg = messages.emplace_back(this, std::string(msg), "", "", "", std::string(""), false, true, 0);
 	chatmsg.text.erase(chatmsg.text.begin());
 	for (auto& span : chatmsg.text) {
 		if (auto string = span->Downcast<ChatComponents::String>()) {
@@ -452,7 +471,8 @@ bool ChatOverlay::IsTriggeredOrRepeating(CustomKeyTimers key) {
 std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOverlay* parent, bool has_badge) const {
 	StringView msg(text_orig);
 	std::vector<std::shared_ptr<ChatComponent>> out;
-	static std::regex pattern(":(\\w+):");
+	static std::regex emoji_pattern(":(\\w+):");
+	static std::regex screenshot_pattern(R"regex(\[(t)?([\w\d]{16})(?::(\d)+)?\])regex");
 
 	int text_height = OverlayUtils::ChatTextHeight();
 	auto font = Font::ChatText();
@@ -473,24 +493,39 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 		return Point{ rect.width, rect.height };
 	}, ChatComponents::Header));
 
-	auto begin = std::cregex_iterator(msg.begin(), msg.end(), pattern);
-	auto end = decltype(begin){};
-
+	auto it = msg.begin();
 	auto last_end = msg.begin();
-	for (auto& it = begin; it != end; ++it) {
-		auto& match = *it;
+	while (it != msg.end()) {
+		std::cmatch match;
+		if (std::regex_search(it, msg.end(), match, emoji_pattern)) {
+			StringView between(last_end, match[0].first - last_end);
+			if (!between.empty()) {
+				out.emplace_back(std::make_shared<ChatString>(between));
+			}
 
-		StringView between(last_end, match[0].first - last_end);
-		if (!between.empty()) {
-			out.emplace_back(std::make_shared<ChatString>(between));
+			auto emoji_key = match[1].str();
+			if (emojis.empty() || emojis.find(emoji_key) != emojis.end())
+				out.emplace_back(std::make_shared<ChatEmoji>(parent, text_height, text_height, emoji_key));
+			else
+				out.emplace_back(std::make_shared<ChatString>(match[0].str()));
+			last_end = match[0].second;
+			it = last_end;
 		}
+		else if (std::regex_search(it, msg.end(), match, screenshot_pattern)) {
+			StringView between(last_end, match[0].first - last_end);
+			if (!between.empty()) {
+				out.emplace_back(std::make_shared<ChatString>(between));
+			}
 
-		auto emoji_key = match[1].str();
-		if (emojis.empty() || emojis.find(emoji_key) != emojis.end())
-			out.emplace_back(std::make_shared<ChatEmoji>(parent, OverlayUtils::ChatTextHeight(), OverlayUtils::ChatTextHeight(), emoji_key));
-		else
-			out.emplace_back(std::make_shared<ChatString>(match[0].str()));
-		last_end = match[0].second;
+			auto temp = match[1].str() == "t";
+			auto id = match[2].str();
+			out.emplace_back(std::make_shared<ChatScreenshot>(parent, sender_uuid, id, temp, false));
+			last_end = match[0].second;
+			it = last_end;
+		}
+		else {
+			break;
+		}
 	}
 
 	StringView last(last_end, msg.end() - last_end);
@@ -502,9 +537,9 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 }
 
 ChatOverlayMessage::ChatOverlayMessage(
-	ChatOverlay* parent_, std::string text, std::string sender, std::string system_, std::string badge,
+	ChatOverlay* parent_, std::string text, std::string sender, std::string sender_uuid, std::string system_, std::string badge,
 	bool account, bool global, int rank) :
-	parent(parent_), text_orig(std::move(text)), sender(std::move(sender)), system(system_), account(account), global(global), rank(rank)
+	parent(parent_), text_orig(std::move(text)), sender(std::move(sender)), sender_uuid(std::move(sender_uuid)), system(system_), account(account), global(global), rank(rank)
 {
 	bool has_badge = badge != "null" && !badge.empty();
 
@@ -568,8 +603,32 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 	req->Start();
 }
 
-ChatScreenshot::ChatScreenshot(ChatOverlay* parent, std::string id_, bool temp, bool spoiler) :
-	parent(parent), id(std::move(id_)), temp(temp), spoiler(spoiler)
+ChatScreenshot::ChatScreenshot(ChatOverlay* parent, std::string uuid_, std::string id_, bool temp, bool spoiler) :
+	ChatComponent(sizer, ChatComponents::Screenshot), parent(parent), uuid(std::move(uuid_)), id(std::move(id_)), temp(temp), spoiler(spoiler)
 {
+	uv_queue_work(uv_default_loop(), &task,
+	[](uv_work_t* task) {
+		#define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
+		auto comp = EP_CONTAINER_OF(task, ChatScreenshot, task);
+		#undef EP_CONTAINER_OF
+
+		std::string endpoint(GMI().ApiEndpoint("screenshots/"));
+		if (comp->temp)
+			endpoint.append("temp/");
+		endpoint.append(fmt::format("{}/{}.png", comp->uuid, comp->id));
+		auto resp = cpr::Get(cpr::Url{endpoint});
+		Output::Debug("{} {}", resp.status_code, resp.url.c_str());
+		if (!(resp.status_code >= 200 && resp.status_code < 300))
+			return;
+		comp->bitmap = Bitmap::Create((uint8_t*)resp.text.c_str(), resp.text.size(), false);
+		comp->parent->MarkDirty();
+	},
+	[](uv_work_t* task, int) {
+	});
 }
 
+Point ChatScreenshot::sizer() {
+	if (OverlayUtils::LargeScreen())
+		return { 192, 144 };
+	return { 64, 48 };
+}
