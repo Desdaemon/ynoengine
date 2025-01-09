@@ -670,6 +670,30 @@
 			}
 		},
 		{
+			"name": "ynoshell-parent",
+			"hidden": true,
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno",
+				"VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/builds/cmake/Windows.MSVC.toolchain.cmake"
+			}
+		},
+		{
+			"name": "windows-ynoshell-release",
+			"displayName": "Windows (ynoshell) (Release)",
+			"inherits": [
+				"ynoshell-parent",
+				"windows-release"
+			]
+		},
+		{
+			"name": "windows-ynoshell-relwithdebinfo",
+			"displayName": "Windows (ynoshell) (RelWithDebInfo)",
+			"inherits": [
+				"ynoshell-parent",
+				"windows-relwithdebinfo"
+			]
+		},
+		{
 			"name": "macos-parent",
 			"cacheVariables": {
 				"PLAYER_PREFIX_PATH_APPEND": "$env{EASYRPG_BUILDSCRIPTS}/macos/universal",
@@ -1573,11 +1597,13 @@
 		},
 		{
 			"name": "windows-relwithdebinfo",
-			"configurePreset": "windows-relwithdebinfo"
+			"configurePreset": "windows-relwithdebinfo",
+			"configuration": "RelWithDebInfo"
 		},
 		{
 			"name": "windows-release",
-			"configurePreset": "windows-release"
+			"configurePreset": "windows-release",
+			"configuration": "Release"
 		},
 		{
 			"name": "windows-sdl3-debug",
@@ -1710,6 +1736,16 @@
 		{
 			"name": "windows-x64-vs2022-libretro-release",
 			"configurePreset": "windows-x64-vs2022-libretro-release"
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"configurePreset": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"configuration": "RelWithDebInfo"
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-release",
+			"configurePreset": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"configuration": "Release"
 		},
 		{
 			"name": "macos-debug",

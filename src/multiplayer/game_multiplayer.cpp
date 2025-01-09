@@ -558,7 +558,8 @@ void Game_Multiplayer::InitConnection() {
 				std::string badge;
 				bool account = false;
 				int rank = 0;
-				if (auto player = playerdata.find((std::string)(*it)["uuid"]); player != playerdata.end()) {
+				std::string uuid((*it)["uuid"]);
+				if (auto player = playerdata.find(uuid); player != playerdata.end()) {
 					name = player->second.name;
 					system = player->second.systemName;
 					badge = player->second.badge;
@@ -566,7 +567,7 @@ void Game_Multiplayer::InitConnection() {
 					rank = player->second.rank;
 				}
 				std::string contents((*it)["contents"]);
-				chatoverlay.AddMessage(contents, name, system, badge, account, true, rank);
+				chatoverlay.AddMessage(contents, name, uuid, system, badge, account, true, rank);
 				lastmsgid = (std::string)(*it)["msgId"];
 			}
 			if (!username.empty()) {
@@ -598,7 +599,7 @@ void Game_Multiplayer::InitConnection() {
 			account = player->second.account;
 			rank = player->second.rank;
 		}
-		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account, true, rank);
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, true, rank);
 		lastmsgid = p.msgid;
 	});
 	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
@@ -615,7 +616,7 @@ void Game_Multiplayer::InitConnection() {
 			account = player->second.account;
 			rank = player->second.rank;
 		}
-		Graphics::GetChatOverlay().AddMessage(p.msg, name, system, badge, account, false, rank);
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, false, rank);
 	});
 	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
 		auto& player = playerdata[p.uuid];
