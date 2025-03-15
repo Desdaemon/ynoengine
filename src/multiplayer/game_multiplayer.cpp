@@ -473,6 +473,7 @@ void Game_Multiplayer::InitConnection() {
 
 		cu_temperature = p.temperature;
 		cu_precipitation = p.precipitation;
+		UpdateCUWeather();
 	});
 }
 
