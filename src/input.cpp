@@ -439,12 +439,12 @@ void Input::SimulateButtonPress(Input::InputButton button) {
 
 int Input::RenderTextComposition(Bitmap& contents, int offset, int y, Font* font_) {
 	auto& font = font_ ? *font_ : *Font::Default();
-	StringView text(Input::composition.text.data());
+	std::string_view text(Input::composition.text.data());
 	std::u32string text32;
 	auto iter = text.data();
 	auto end = iter + text.size();
 
-	while (iter != text.end()) {
+	while (iter != &*text.end()) {
 		auto ret = Utils::TextNext(iter, end, 0);
 		iter = ret.next;
 		if (!ret) continue;

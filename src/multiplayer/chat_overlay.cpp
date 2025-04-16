@@ -40,6 +40,7 @@ using json = nlohmann::json;
 #include "compiler.h"
 #include "icons.h"
 #include "overlay_utils.h"
+#include "image_webp.h"
 
 namespace {
 	Point ChatTextSquare() {
@@ -47,11 +48,13 @@ namespace {
 		return { text_height, text_height };
 	}
 	enum class FileExtensions : char { png, gif, webp };
+
 	struct EmojiInfo {
 	public:
 		FileExtensions extensions = FileExtensions::png;
 	};
 	std::map<std::string, EmojiInfo> emojis;
+	std::unordered_map<std::string, std::weak_ptr<ChatEmoji>> emojiCache; // Cache for animated emojis
 
 	void InitializeEmojiMappings() {
 		if (!emojis.empty()) return;
@@ -72,8 +75,14 @@ namespace {
 					if (ext == ".png") {
 						auto& emoji = emojis[(std::string)key];
 						emoji.extensions = FileExtensions::png;
+					} else if (ext == ".gif") {
+						auto& emoji = emojis[(std::string)key];
+						emoji.extensions = FileExtensions::gif;
+					} else if (ext == ".webp") {
+						auto& emoji = emojis[(std::string)key];
+						emoji.extensions = FileExtensions::webp;
 					}
-					//else Output::Debug("unimplemented emoji {}.{}", key, ext);
+					// else Output::Debug("unimplemented emoji {}.{}", key, ext);
 				}
 			}
 		},
@@ -309,7 +318,7 @@ ChatOverlayMessage& ChatOverlay::AddMessage(
 	return ret;
 }
 
-void ChatOverlay::AddSystemMessage(StringView msg) {
+void ChatOverlay::AddSystemMessage(std::string_view msg) {
 	auto& chatmsg = messages.emplace_back(this, std::string(msg), "", "", "", std::string(""), false, true, 0);
 	chatmsg.text.erase(chatmsg.text.begin());
 	for (auto& span : chatmsg.text) {
@@ -336,6 +345,17 @@ void ChatOverlay::Update() {
 				message.hidden = true;
 			}
 			dirty = true;
+		}
+	}
+
+	// Update animations for all visible emojis
+	for (auto it = emojiCache.begin(); it != emojiCache.end();) {
+		auto& emoji = it->second;
+		if (auto emojiPtr = emoji.lock()) {
+			emojiPtr->UpdateAnimation();
+			++it; // Move to the next element
+		} else {
+			it = emojiCache.erase(it); // Remove expired weak pointers
 		}
 	}
 }
@@ -378,7 +398,7 @@ void ChatOverlay::UpdateScene() {
 
 	// chat input only below this point
 
-	StringView ui_input(Input::text_input.data());
+	std::string_view ui_input(Input::text_input.data());
 	if (!ui_input.empty()) {
 		input.append(Utils::DecodeUTF32(ui_input));
 		dirty = true;
@@ -395,7 +415,8 @@ void ChatOverlay::UpdateScene() {
 	if (Input::IsRawKeyTriggered(Input::Keys::RETURN) && !input.empty()) {
 		// TODO: map chat and party chat
 		std::string encoded = Utils::EncodeUTF(input);
-		GMI().sessionConn.SendPacket(Messages::C2S::SessionGSay{ std::move(encoded) });
+		ChatOverlay::AddMessage(encoded, "blah", "00000000000000000000", "", "", true, true, 0);
+		// GMI().sessionConn.SendPacket(Messages::C2S::SessionGSay{ std::move(encoded) });
 		input.clear();
 		dirty = true;
 	}
@@ -469,7 +490,7 @@ bool ChatOverlay::IsTriggeredOrRepeating(CustomKeyTimers key) {
 }
 
 std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOverlay* parent, bool has_badge) const {
-	StringView msg(text_orig);
+	std::string_view msg(text_orig);
 	std::vector<std::shared_ptr<ChatComponent>> out;
 	static std::regex emoji_pattern(":(\\w+):");
 	static std::regex screenshot_pattern(R"regex(\[(t)?([\w\d]{16})(?::(\d)+)?\])regex");
@@ -496,23 +517,24 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 	auto it = msg.begin();
 	auto last_end = msg.begin();
 	while (it != msg.end()) {
-		std::cmatch match;
+		std::match_results<std::string_view::const_iterator> match;
 		if (std::regex_search(it, msg.end(), match, emoji_pattern)) {
-			StringView between(last_end, match[0].first - last_end);
+			std::string_view between(&*last_end, match[0].first - last_end);
 			if (!between.empty()) {
 				out.emplace_back(std::make_shared<ChatString>(between));
 			}
 
 			auto emoji_key = match[1].str();
 			if (emojis.empty() || emojis.find(emoji_key) != emojis.end())
-				out.emplace_back(std::make_shared<ChatEmoji>(parent, text_height, text_height, emoji_key));
+				// out.emplace_back(std::make_shared<ChatEmoji>(parent, text_height, text_height, emoji_key));
+				out.emplace_back(ChatEmoji::GetOrCreate(emoji_key, parent));
 			else
 				out.emplace_back(std::make_shared<ChatString>(match[0].str()));
 			last_end = match[0].second;
 			it = last_end;
 		}
 		else if (std::regex_search(it, msg.end(), match, screenshot_pattern)) {
-			StringView between(last_end, match[0].first - last_end);
+			std::string_view between(&*last_end, match[0].first - last_end);
 			if (!between.empty()) {
 				out.emplace_back(std::make_shared<ChatString>(between));
 			}
@@ -528,7 +550,7 @@ std::vector<std::shared_ptr<ChatComponent>> ChatOverlayMessage::Convert(ChatOver
 		}
 	}
 
-	StringView last(last_end, msg.end() - last_end);
+	std::string_view last(&*last_end, msg.end() - last_end);
 	if (!last.empty()) {
 		out.emplace_back(std::make_shared<ChatString>(last));
 	}
@@ -582,25 +604,139 @@ ChatEmoji::ChatEmoji(ChatOverlay* parent_, int width, int height, std::string em
 	RequestBitmap(parent);
 }
 
-
 void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 	if (emoji.empty()) return;
 	parent = parent_;
+
 	auto req = AsyncHandler::RequestFile("../images/ynomoji", emoji);
 	req->SetGraphicFile(true);
 	req->SetParentScope(true);
-	req->SetRequestExtension(".png");
-	request = req->Bind([this](FileRequestResult* result) {
+
+	// Determine the file extension to request based on the emoji's extension type
+	auto extension = emojis[emoji].extensions;
+	switch (extension) {
+		case FileExtensions::png:
+			req->SetRequestExtension(".png");
+			break;
+		case FileExtensions::gif:
+			req->SetRequestExtension(".gif");
+			break;
+		case FileExtensions::webp:
+			req->SetRequestExtension(".webp");
+			break;
+	}
+
+	request = req->Bind([this, extension](FileRequestResult* result) {
 		if (!result->success) {
 			emoji.clear();
 			Output::Debug("failed: {}", result->file);
 			return;
 		}
-		bitmap = Cache::Emoji(result->file);
-		bitmap->SetBilinear();
-		parent->MarkDirty();
+		switch (extension) {
+			case FileExtensions::gif:
+				DecodeGif(result->file);
+				break;
+			case FileExtensions::webp:
+				DecodeWebP(result->file);
+				break;
+			case FileExtensions::png:
+				bitmap = Cache::Emoji(result->file);
+				bitmap->SetBilinear();
+				break;
+		}
+		if (parent) parent->MarkDirty();
 	});
 	req->Start();
+}
+
+void ChatEmoji::DecodeGif(const std::string& filePath) {
+	// Use a GIF decoding library to load frames and delays
+	// Example: giflib or similar library
+	// Pseudo-code:
+	frames.clear();
+	frameDelays.clear();
+	// Load GIF file and extract frames and delays
+	// for each frame in GIF:
+	//     Convert frame to Bitmap and store in gifFrames
+	//     Store delay in frameDelays
+	// Set currentFrame to 0
+	currentFrame = 0;
+	lastFrameTime = std::chrono::steady_clock::now();
+}
+
+void ChatEmoji::DecodeWebP(const std::string& filePath) {
+	// Use a WebP decoding library to load the image
+	// Example: libwebp or similar library
+	// Pseudo-code:
+	frames.clear();
+	auto fs = FileFinder::OpenImage("../images/ynomoji", filePath);
+	if (!fs) return;
+
+	auto dec = ImageWebP::Decoder::Create(fs);
+	if (!dec) return;
+
+	ImageOut image{};
+	TimingInfo timing{};
+	int smear = 0;
+	while (dec.value().ReadNext(image, timing)) {
+		auto bitmap = Bitmap::Create(image.pixels, image.width, image.height, image.bpp, format_R8G8B8A8_a().format());
+		if (!bitmap) {
+			delete image.pixels;
+			continue;
+		}
+		bitmap->SetBilinear();
+		frames.push_back(std::move(bitmap));
+
+		if (!timing.timestamp)
+			timing.timestamp = 100;
+
+		int lastDelay = frameDelays.empty() ? 0 : frameDelays.back();
+		if (timing.timestamp - lastDelay < 20) {
+			smear += timing.timestamp - lastDelay;
+			frameDelays.push_back(20);
+		} else {
+			frameDelays.push_back(timing.timestamp - lastDelay + smear);
+			smear = 0;
+		}
+		loopLength += frameDelays.back();
+	}
+	// if (image.pixels) delete image.pixels;
+
+	currentFrame = 0;
+	if (loopLength && frames.size() > 1) {
+		lastFrameTime = std::chrono::steady_clock::now();
+		int loopDelta = std::chrono::duration_cast<std::chrono::milliseconds>(lastFrameTime.time_since_epoch()).count() % loopLength;
+		while (currentFrame < frameDelays.size() && loopDelta >= frameDelays[currentFrame]) {
+			loopDelta -= frameDelays[currentFrame];
+			currentFrame = (currentFrame + 1) % frames.size();
+		}
+	}
+}
+
+void ChatEmoji::UpdateAnimation() {
+	if (frames.size() < 2 || frameDelays.empty()) return; // No animation to update
+
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFrameTime).count();
+	if (elapsed >= frameDelays[currentFrame]) {
+		// Move to the next frame
+		currentFrame = (currentFrame + 1) % frames.size();
+		lastFrameTime = now;
+		bitmap = frames[currentFrame]; // Update the displayed frame
+		if (parent) parent->MarkDirty(); // Mark the parent as dirty to trigger a redraw
+	}
+}
+
+std::shared_ptr<ChatEmoji> ChatEmoji::GetOrCreate(const std::string& emojiKey, ChatOverlay* parent) {
+	// Check if the emoji is already in the cache
+	if (auto existingEmoji = emojiCache[emojiKey].lock()) {
+		return existingEmoji; // Return the existing shared reference
+	}
+
+	// Create a new instance and store it in the cache
+	auto newEmoji = std::make_shared<ChatEmoji>(parent, 0, 0, emojiKey);
+	emojiCache[emojiKey] = newEmoji; // Store the weak reference
+	return newEmoji;
 }
 
 ChatScreenshot::ChatScreenshot(ChatOverlay* parent, std::string uuid_, std::string id_, bool temp, bool spoiler) :

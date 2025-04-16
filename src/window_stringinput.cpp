@@ -22,7 +22,7 @@
 #include "cache.h"
 #include "output.h"
 
-Window_StringInput::Window_StringInput(StringView initial_value, int ix, int iy, int iwidth, int iheight) :
+Window_StringInput::Window_StringInput(std::string_view initial_value, int ix, int iy, int iwidth, int iheight) :
 	Window_Selectable(ix, iy, iwidth, iheight), value(initial_value)
 {
 	SetContents(Bitmap::Create(width - 16, height - 16));
@@ -69,7 +69,7 @@ void Window_StringInput::Update() {
 
 	bool dirty = false;
 
-	//StringView input(Input::text_input.data());
+	//std::string_view input(Input::text_input.data());
 	if (!Input::text_input.empty()) {
 		value.append(Input::text_input);
 		dirty = true;

@@ -116,7 +116,7 @@ public:
 	inline bool ShowingAll() const noexcept { return show_all;  }
 	void DoScroll(int increase);
 	void MarkDirty() noexcept;
-	void AddSystemMessage(StringView string);
+	void AddSystemMessage(std::string_view string);
 private:
 	bool IsAnyMessageVisible() const;
 
@@ -167,7 +167,7 @@ public:
 	std::string string;
 	Color color;
 
-	ChatString(StringView other, Color color = default_color) : ChatComponent(0, 0, ChatComponents::String),
+	ChatString(std::string_view other, Color color = default_color) : ChatComponent(0, 0, ChatComponents::String),
 		string(ToString(other)), color(color) {}
 };
 
@@ -180,6 +180,18 @@ public:
 
 	ChatEmoji(ChatOverlay* parent, int width, int height, std::string emoji);
 	void RequestBitmap(ChatOverlay* parent);
+	void UpdateAnimation();
+	static std::shared_ptr<ChatEmoji> GetOrCreate(const std::string& emojiKey, ChatOverlay* parent);
+
+private:
+	std::vector<std::shared_ptr<Bitmap>> frames; // Store frames for GIFs
+	std::vector<int> frameDelays; // Store delays for each frame in milliseconds
+	int currentFrame = 0; // Current frame index for animated GIFs
+	int loopLength = 0;
+	std::chrono::steady_clock::time_point lastFrameTime; // Time of the last frame update
+
+	void DecodeGif(const std::string& filePath);
+	void DecodeWebP(const std::string& filePath);
 };
 
 class ChatScreenshot : public ChatComponent {

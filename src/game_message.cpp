@@ -85,11 +85,11 @@ int Game_Message::GetRealPosition() {
 	}
 }
 
-int Game_Message::WordWrap(StringView line, const int limit, const Game_Message::WordWrapCallback& callback) {
+int Game_Message::WordWrap(std::string_view line, const int limit, const Game_Message::WordWrapCallback& callback) {
 	return WordWrap(line, limit, callback, *Font::Default());
 }
 
-int Game_Message::WordWrap(StringView line, const int limit, const Game_Message::WordWrapCallback& callback, const Font& font) {
+int Game_Message::WordWrap(std::string_view line, const int limit, const Game_Message::WordWrapCallback& callback, const Font& font) {
 	int start = 0;
 	int line_count = 0;
 
@@ -129,7 +129,7 @@ int Game_Message::WordWrap(StringView line, const int limit, const Game_Message:
 	return line_count;
 }
 
-int Game_Message::WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const typename Game_Message::ComponentWrapCallback& callback, const Font& font) {
+int Game_Message::WordWrap(const lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const typename Game_Message::ComponentWrapCallback& callback, const Font& font) {
 	int line_count = 0;
 	int line_width = 0;
 
@@ -141,7 +141,7 @@ int Game_Message::WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, cons
 		line_width = 0;
 		line_spans.clear();
 	};
-	for (auto span = spans.begin(); span != spans.end(); ++span) {
+	for (auto span = spans.cbegin(); span != spans.cend(); ++span) {
 		if (auto fragment = span->get()->Downcast<ChatComponents::String>()) {
 			auto& line = fragment->string;
 

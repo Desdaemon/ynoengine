@@ -1188,7 +1188,7 @@ void Game_Multiplayer::UpdateTimers() {
 	}
 }
 
-void Game_Multiplayer::SetNickname(StringView name) {
+void Game_Multiplayer::SetNickname(std::string_view name) {
 	std::string value(name);
 	GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionPlayerName>(value);
 	username = value;

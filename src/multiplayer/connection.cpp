@@ -22,13 +22,13 @@ void Connection::FlushQueue() {
 
 void Connection::Dispatch(std::string_view name, ParameterList args) {
 	if (raw_handler) {
-		std::ostringstream os{};
+		std::string os{};
 		for (auto it = args.begin(); it != args.end(); ++it) {
-			os << *it;
+			os.append(*it);
 			if (std::next(it) != args.end())
-				os << Packet::PARAM_DELIM;
+				os.append(Packet::PARAM_DELIM);
 		}
-		raw_handler(name, os.str());
+		raw_handler(name, os);
 	}
 	auto it = handlers.find(std::string(name));
 	if (it != handlers.end()) {

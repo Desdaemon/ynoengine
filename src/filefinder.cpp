@@ -499,7 +499,7 @@ Filesystem_Stream::InputStream open_generic_with_fallback(std::string_view dir, 
 }
 
 Filesystem_Stream::InputStream FileFinder::OpenImage(std::string_view dir, std::string_view name) {
-	int initial_depth = dir.find("../") == 0 ? 0 : 1;
+	int initial_depth = StartsWith(dir, "../") ? 0 : 1;
 	DirectoryTree::Args args = { MakePath(dir, name), IMG_TYPES, initial_depth, false };
 	return open_generic_with_fallback(dir, name, args);
 }
