@@ -44,7 +44,7 @@
 #  include "multiplayer/messages.h"
 #endif
 
-class MenuItem final : public ConfigParam<StringView> {
+class MenuItem final : public ConfigParam<std::string_view> {
 public:
 	explicit MenuItem(std::string_view name, std::string_view description, std::string_view value) :
 		ConfigParam<std::string_view>(name, description, "", "", value) {
@@ -761,7 +761,7 @@ void Window_Settings::RefreshButtonList() {
 void Window_Settings::RefreshOnline() {
 	Game_ConfigOnline& cfg = GMI().GetConfig();
 
-	using LockedMenuItem = LockedConfigParam<StringView>;
+	using LockedMenuItem = LockedConfigParam<std::string_view>;
 
 	if (!cfg.username.Get().empty() && !cfg.session_token.Get().empty()) {
 		AddOption(LockedMenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});

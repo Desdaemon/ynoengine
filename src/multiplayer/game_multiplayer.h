@@ -181,7 +181,7 @@ public:
 	std::array<Game_Clock::time_point, Timers::END> timers{};
 
 	void UpdateTimers();
-	void SetNickname(StringView name);
+	void SetNickname(std::string_view name);
 	std::string ApiEndpoint(std::string_view path) const;
 };
 

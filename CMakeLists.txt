@@ -239,6 +239,8 @@ add_library(${PROJECT_NAME} OBJECT
 	src/image_png.h
 	src/image_xyz.cpp
 	src/image_xyz.h
+	src/image_webp.cpp
+	src/image_webp.h
 	src/input_buttons_desktop.cpp
 	src/input_buttons.h
 	src/input.cpp
@@ -638,6 +640,10 @@ if(${PLAYER_SHELL} STREQUAL "yno")
 		GIT_TAG 0.12.0)
 	FetchContent_MakeAvailable(webview)
 	target_link_libraries(${PROJECT_NAME} webview::core)
+
+	player_find_package(NAME GIF TARGET GIF::GIF REQUIRED)
+	find_package(WebP CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} WebP::webp WebP::webpdecoder WebP::webpdemux)
 
 elseif(${PLAYER_SHELL} STREQUAL "none")
 	# do nothing
