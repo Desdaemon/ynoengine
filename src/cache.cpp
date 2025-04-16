@@ -407,11 +407,11 @@ BitmapRef Cache::System(std::string_view file) {
 	return LoadBitmap<Material::System>(file);
 }
 
-BitmapRef Cache::Emoji(StringView file) {
+BitmapRef Cache::Emoji(std::string_view file) {
 	return LoadBitmap<Material::Emoji>(file);
 }
 
-BitmapRef Cache::Badge(StringView file) {
+BitmapRef Cache::Badge(std::string_view file) {
 	return LoadBitmap<Material::Badge>(file);
 }
 

@@ -769,7 +769,7 @@ void Game_Multiplayer::MainPlayerTriggeredEvent(int event_id, bool action) {
 	}
 }
 
-void Game_Multiplayer::SystemGraphicChanged(StringView sys) {
+void Game_Multiplayer::SystemGraphicChanged(std::string_view sys) {
 	connection.SendPacketAsync<C2S::SysNamePacket>(ToString(sys));
 	Web_API::OnUpdateSystemGraphic(ToString(sys));
 #ifndef EMSCRIPTEN
@@ -1176,7 +1176,7 @@ void Game_Multiplayer::UpdateTimers() {
 	}
 }
 
-void Game_Multiplayer::SetNickname(StringView name) {
+void Game_Multiplayer::SetNickname(std::string_view name) {
 	std::string value(name);
 	GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionPlayerName>(value);
 	username = value;

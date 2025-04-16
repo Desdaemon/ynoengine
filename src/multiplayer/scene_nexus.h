@@ -30,7 +30,7 @@ public:
 	void DrawBackground(Bitmap&) override;
 	void vUpdate() override;
 private:
-	void LaunchGame(StringView);
+	void LaunchGame(std::string_view);
 	void InitWebview();
 	std::string selected_game;
 	std::filesystem::path old_pwd;

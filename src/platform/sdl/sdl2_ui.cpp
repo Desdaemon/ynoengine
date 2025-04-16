@@ -510,8 +510,9 @@ bool Sdl2Ui::RefreshDisplayMode() {
 						SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 #else
 					GtkWidget* childHandle = (GtkWidget*&)widget.value();
-#endif
+#endif // PLAYER_YNO
 				}
+				Sleep(200);
 				Web_API::InitializeBindings();
 				w.run();
 			}

@@ -97,7 +97,7 @@ void Scene_Nexus::vUpdate() {
 	}
 }
 
-void Scene_Nexus::LaunchGame(StringView game) {
+void Scene_Nexus::LaunchGame(std::string_view game) {
 #ifdef _WIN32
 	std::string userhome(std::getenv("APPDATA"));
 	userhome.append("/ynoproject");
