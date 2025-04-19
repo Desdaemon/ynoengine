@@ -66,8 +66,8 @@ bool ImageWebP::Decoder::ReadNext(ImageOut& output, TimingInfo& timing) {
         Output::Warning("ImageWebP: Failed to decode next frame");
         return false;
     }
-    output.pixels = new uint32_t[animData.canvas_width * animData.canvas_height * 4];
-    memcpy(output.pixels, pixels, animData.canvas_width * animData.canvas_height * 4);
+    output.pixels = new uint32_t[animData.canvas_width * animData.canvas_height];
+    memcpy(output.pixels, pixels, animData.canvas_width * animData.canvas_height * sizeof(uint32_t));
     output.bpp = 32; // WebP always uses 32 bits per pixel (RGBA)
     output.height = animData.canvas_height;
     output.width = animData.canvas_width;

@@ -241,6 +241,8 @@ add_library(${PROJECT_NAME} OBJECT
 	src/image_xyz.h
 	src/image_webp.cpp
 	src/image_webp.h
+	src/image_gif.cpp
+	src/image_gif.h
 	src/input_buttons_desktop.cpp
 	src/input_buttons.h
 	src/input.cpp
