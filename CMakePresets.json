@@ -654,6 +654,14 @@
 			]
 		},
 		{
+			"name": "windows-x64-vs2022-ynoshell-debug",
+			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Debug)",
+			"inherits": "windows-x64-vs2022-debug",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
 			"name": "windows-x64-vs2022-ynoshell-release",
 			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Release)",
 			"inherits": "windows-x64-vs2022-release",
@@ -1738,14 +1746,9 @@
 			"configurePreset": "windows-x64-vs2022-libretro-release"
 		},
 		{
-			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
-			"configurePreset": "windows-x64-vs2022-ynoshell-relwithdebinfo",
-			"configuration": "RelWithDebInfo"
-		},
-		{
 			"name": "windows-x64-vs2022-ynoshell-release",
-			"configurePreset": "windows-x64-vs2022-ynoshell-relwithdebinfo",
-			"configuration": "Release"
+			"configurePreset": "windows-x64-vs2022-ynoshell-release",
+			"configuration": "RelWithDebInfo"
 		},
 		{
 			"name": "macos-debug",
