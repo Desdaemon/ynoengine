@@ -41,6 +41,7 @@ using json = nlohmann::json;
 #include "icons.h"
 #include "overlay_utils.h"
 #include "image_webp.h"
+#include "image_gif.h"
 
 namespace {
 	Point ChatTextSquare() {
@@ -201,16 +202,17 @@ void ChatOverlay::Draw(Bitmap& dst) {
 				// semitransparent bg
 				int yidx = lidx + 1 + input_row_offset;
 				int line_height = text_height;
+				bool emojis_only = false;
 
 				// begin override line height for components
 
 				// expand messages with only emojis
-				if (std::all_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Emoji>()); })) {
-					line_height = OverlayUtils::LargeScreen() ? 56 : 18;
-				}
-
 				if (std::any_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Screenshot>()); })) {
 					line_height = ChatScreenshot::sizer().y;
+				}
+				else if (std::all_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Emoji>()); })) {
+					emojis_only = true;
+					line_height = OverlayUtils::LargeScreen() ? 56 : 18;
 				}
 
 				// end override line height
@@ -247,22 +249,21 @@ void ChatOverlay::Draw(Bitmap& dst) {
 					}
 					else if (auto emoji = span->Downcast<ChatComponents::Emoji>()) {
 						Point dims = emoji->GetSize();
+						if (emojis_only) dims.x = dims.y = line_height;
 						int comp_y = y + (baseline ? baseline - text_height : 0);
 						if (emoji->bitmap) {
-							double zoom = emoji->bitmap->GetRect().y / (double)text_height;
-							bitmap->StretchBlit({offset, comp_y, line_height, line_height}, *emoji->bitmap, emoji->bitmap->GetRect(), 255);
+							bitmap->StretchBlit({offset, comp_y, dims.x, dims.y}, *emoji->bitmap, emoji->bitmap->GetRect(), 255);
 						}
-						else {
+						else if (!emoji->HasAnimation()) {
 							// the emoji is still live, request it now
 							emoji->RequestBitmap(this);
-							bitmap->FillRect({ offset, comp_y, line_height, line_height }, offwhite);
+							bitmap->FillRect({ offset, comp_y, dims.y, dims.y }, offwhite);
 						}
-						offset += line_height;
+						offset += dims.x;
 					}
 					else if (auto screenshot = span->Downcast<ChatComponents::Screenshot>()) {
 						Point dims = screenshot->GetSize();
 						if (screenshot->bitmap) {
-							double zoom = screenshot->bitmap->GetRect().y / (double)text_height;
 							bitmap->StretchBlit({offset, y, dims.x, dims.y}, *screenshot->bitmap, screenshot->bitmap->GetRect(), 255);
 						}
 						else {
@@ -608,6 +609,8 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 	if (emoji.empty()) return;
 	parent = parent_;
 
+	if (request) return;
+
 	auto req = AsyncHandler::RequestFile("../images/ynomoji", emoji);
 	req->SetGraphicFile(true);
 	req->SetParentScope(true);
@@ -627,6 +630,7 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 	}
 
 	request = req->Bind([this, extension](FileRequestResult* result) {
+		request.reset(); // Clear the request after processing
 		if (!result->success) {
 			emoji.clear();
 			Output::Debug("failed: {}", result->file);
@@ -650,18 +654,43 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 }
 
 void ChatEmoji::DecodeGif(const std::string& filePath) {
-	// Use a GIF decoding library to load frames and delays
-	// Example: giflib or similar library
-	// Pseudo-code:
+	constexpr int minimum_frame_delay = 64;
 	frames.clear();
 	frameDelays.clear();
-	// Load GIF file and extract frames and delays
-	// for each frame in GIF:
-	//     Convert frame to Bitmap and store in gifFrames
-	//     Store delay in frameDelays
-	// Set currentFrame to 0
+	auto fs = FileFinder::OpenImage("../images/ynomoji", filePath);
+	if (!fs) return;
+
+	ImageGif::Decoder dec(fs);
+	if (!dec) return;
+
+	ImageOut image{};
+	GifTimingInfo timing{};
+	while (dec.ReadNext(image, timing)) {
+		auto bitmap = Bitmap::Create(image.pixels, image.width, image.height, 0, format_R8G8B8A8_a().format());
+		if (!bitmap) {
+			if (image.pixels) delete[] image.pixels;
+			continue;
+		}
+		bitmap->SetBilinear();
+		frames.push_back(std::move(bitmap));
+
+		if (!timing.delay)
+			timing.delay = 100;
+
+		int delay = std::min(minimum_frame_delay, timing.delay);
+		frameDelays.push_back(delay);
+		loopLength += frameDelays.back();
+	}
+
 	currentFrame = 0;
-	lastFrameTime = std::chrono::steady_clock::now();
+	if (loopLength && frames.size() > 1) {
+		lastFrameTime = std::chrono::steady_clock::now();
+		int loopDelta = std::chrono::duration_cast<std::chrono::milliseconds>(lastFrameTime.time_since_epoch()).count() % loopLength;
+		while (currentFrame < frameDelays.size() && loopDelta >= frameDelays[currentFrame]) {
+			loopDelta -= frameDelays[currentFrame];
+			currentFrame = (currentFrame + 1) % frames.size();
+		}
+	}
 }
 
 void ChatEmoji::DecodeWebP(const std::string& filePath) {
@@ -669,6 +698,7 @@ void ChatEmoji::DecodeWebP(const std::string& filePath) {
 	// Example: libwebp or similar library
 	// Pseudo-code:
 	frames.clear();
+	frameDelays.clear();
 	auto fs = FileFinder::OpenImage("../images/ynomoji", filePath);
 	if (!fs) return;
 
@@ -714,7 +744,8 @@ void ChatEmoji::DecodeWebP(const std::string& filePath) {
 }
 
 void ChatEmoji::UpdateAnimation() {
-	if (frames.size() < 2 || frameDelays.empty()) return; // No animation to update
+	if (frames.size() == 1) bitmap = frames[0]; // If there's only one frame, just display it
+	else if (frames.size() < 2 || frameDelays.empty()) return; // No animation to update
 
 	auto now = std::chrono::steady_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFrameTime).count();

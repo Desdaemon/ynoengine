@@ -23,6 +23,7 @@
 #include <lcf/span.h>
 #include <chrono>
 #include <uv.h>
+#include <mutex>
 
 #include "drawable.h"
 #include "bitmap.h"
@@ -183,6 +184,9 @@ public:
 	void UpdateAnimation();
 	static std::shared_ptr<ChatEmoji> GetOrCreate(const std::string& emojiKey, ChatOverlay* parent);
 
+	inline bool HasAnimation() const noexcept {
+		return frames.size() > 1;
+	}
 private:
 	std::vector<std::shared_ptr<Bitmap>> frames; // Store frames for GIFs
 	std::vector<int> frameDelays; // Store delays for each frame in milliseconds
