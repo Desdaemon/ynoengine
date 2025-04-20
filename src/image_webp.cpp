@@ -20,38 +20,36 @@
 #include "output.h"
 
 ImageWebP::Decoder::~Decoder() noexcept {
-    // if (decoder) WebPAnimDecoderDelete(decoder);
-    // WebPDataClear(&data);
+    if (decoder) WebPAnimDecoderDelete(decoder);
+    WebPDataClear(&data);
 }
 
-std::optional<ImageWebP::Decoder> ImageWebP::Decoder::Create(Filesystem_Stream::InputStream& is) noexcept {
-    ImageWebP::Decoder dec;
-
+ImageWebP::Decoder::Decoder(Filesystem_Stream::InputStream& is) noexcept {
     // is.read(reinterpret_cast<char*>(&dec.data.bytes));
     // WebPMalloc
-    dec.data.size = is.GetSize();
-    dec.data.bytes = (uint8_t*)WebPMalloc(dec.data.size + 1);
-    ((char*)dec.data.bytes)[dec.data.size] = 0;
-    is.read((char*)dec.data.bytes, dec.data.size);
-    if (is.fail()) return {};
+    data.size = is.GetSize();
+    data.bytes = (uint8_t*)WebPMalloc(data.size + 1);
+    ((char*)data.bytes)[data.size] = 0;
+    is.read((char*)data.bytes, data.size);
+    if (is.fail()) return;
 
-    if (!WebPGetInfo(dec.data.bytes, dec.data.size, nullptr, nullptr)) {
+    if (!WebPGetInfo(data.bytes, data.size, nullptr, nullptr)) {
         Output::Warning("ImageWebP: {} is not webp", is.GetName());
-        return {};
+        return;
     }
 
-    dec.decoder = WebPAnimDecoderNew(&dec.data, nullptr);
-    if (!dec.decoder) {
+    decoder = WebPAnimDecoderNew(&data, nullptr);
+    if (!decoder) {
         Output::Warning("ImageWebP: Failed to create decoder for {}", is.GetName());
-        return {};
+        return;
     }
 
-    if (!WebPAnimDecoderGetInfo(dec.decoder, &dec.animData)) {
+    if (!WebPAnimDecoderGetInfo(decoder, &animData)) {
+        if (decoder) WebPAnimDecoderDelete(decoder);
+        decoder = nullptr;
         Output::Warning("ImageWebP: Failed to get animation info for {}", is.GetName());
-        return {};
+        return;
     }
-
-    return dec;
 }
 
 
@@ -68,7 +66,6 @@ bool ImageWebP::Decoder::ReadNext(ImageOut& output, TimingInfo& timing) {
     }
     output.pixels = new uint32_t[animData.canvas_width * animData.canvas_height];
     memcpy(output.pixels, pixels, animData.canvas_width * animData.canvas_height * sizeof(uint32_t));
-    output.bpp = 32; // WebP always uses 32 bits per pixel (RGBA)
     output.height = animData.canvas_height;
     output.width = animData.canvas_width;
 

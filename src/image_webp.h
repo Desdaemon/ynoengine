@@ -33,7 +33,9 @@ namespace ImageWebP {
         ~Decoder() noexcept;
 
         bool ReadNext(ImageOut& output, TimingInfo& timing);
-        static std::optional<Decoder> Create(Filesystem_Stream::InputStream& is) noexcept;
+        // static std::optional<Decoder> Create(Filesystem_Stream::InputStream& is) noexcept;
+        Decoder(Filesystem_Stream::InputStream& is) noexcept;
+        inline operator bool() const noexcept { return decoder != nullptr; }
     private:
         explicit Decoder() noexcept = default;
         WebPAnimDecoder* decoder;
