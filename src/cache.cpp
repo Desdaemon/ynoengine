@@ -160,6 +160,9 @@ namespace {
 			Battlecharset,
 			Battleweapon,
 			Frame,
+			// online-specific
+			Emoji,
+			Badge,
 			END
 		};
 
@@ -199,6 +202,8 @@ namespace {
 		{ "BattleCharSet", DrawCheckerboard<Material::Battlecharset>, true, 144, 144, 384, 384, true, false },
 		{ "BattleWeapon", DrawCheckerboard<Material::Battleweapon>, true, 192, 192, 512, 512, true, false },
 		{ "Frame", DrawCheckerboard<Material::Frame>, true, 320, 320, 240, 240, true, true },
+		{ "../images/ynomoji", DrawCheckerboard<Material::Emoji>, true, 128, 128, 128, 128, false, true },
+		{ "../images/badge", DrawCheckerboard<Material::Badge>, true, 37, 37, 37, 37, false, true },
 	};
 
 	template<Material::Type T>
@@ -400,6 +405,14 @@ BitmapRef Cache::Title(std::string_view file) {
 
 BitmapRef Cache::System(std::string_view file) {
 	return LoadBitmap<Material::System>(file);
+}
+
+BitmapRef Cache::Emoji(std::string_view file) {
+	return LoadBitmap<Material::Emoji>(file);
+}
+
+BitmapRef Cache::Badge(std::string_view file) {
+	return LoadBitmap<Material::Badge>(file);
 }
 
 BitmapRef Cache::Exfont() {

@@ -74,6 +74,13 @@ namespace ConfigEnum {
 		/** Always overlay */
 		Overlay
 	};
+
+	enum class NametagMode {
+		NONE,
+		CLASSIC,
+		COMPACT,
+		SLIM
+	};
 };
 
 #ifdef HAVE_FLUIDLITE
@@ -130,7 +137,7 @@ struct Game_ConfigVideo {
 	EnumConfigParam<ConfigEnum::GameResolution, 3> game_resolution{ "Resolution", "Game resolution. Changes require a restart.", "Video", "GameResolution", ConfigEnum::GameResolution::Original,
 		Utils::MakeSvArray("Original (Recommended)", "Widescreen (Experimental)", "Ultrawide (Experimental)"),
 		Utils::MakeSvArray("original", "widescreen", "ultrawide"),
-		Utils::MakeSvArray("The default resolution (320x240, 4:3)", "Can cause glitches (416x240, 16:9)", "Can cause glitches (560x240, 21:9)")};
+		Utils::MakeSvArray("The default resolution (320x240, 4:3)", "Can cause glithes (416x240, 16:9)", "Can cause glitches (560x240, 21:9)")};
 
 	// These are never shown and are used to restore the window to the previous position
 	ConfigParam<int> window_x{ "", "", "Video", "WindowX", -1 };
@@ -164,6 +171,19 @@ struct Game_ConfigInput {
 	void Hide();
 };
 
+struct Game_ConfigOnline {
+	StringConfigParam session_token{ "", "", "Online", "SessionToken" };
+	StringConfigParam username{ "Username", "Chat nickname or YNOproject account; max 12 characters", "Online", "Username" };
+	// not persisted
+	StringConfigParam password{ "Password", "YNOproject password", "", "", "", true };
+	EnumConfigParam<ConfigEnum::NametagMode, 4> nametag_mode{
+		"Nametags", "Change the nametag display style", "Online", "Nametags", /*default: */ConfigEnum::NametagMode::CLASSIC,
+		Utils::MakeSvArray("None", "Classic", "Compact", "Slim"),
+		Utils::MakeSvArray("none", "classic", "compact", "slim"),
+		Utils::MakeSvArray("Hide nametags", "Same as game text", "Smaller size", "Extra slim")
+	};
+};
+
 struct Game_Config {
 	/** Gameplay subsystem options */
 	Game_ConfigPlayer player;
@@ -176,6 +196,8 @@ struct Game_Config {
 
 	/** Input subsystem options */
 	Game_ConfigInput input;
+
+	Game_ConfigOnline online;
 
 	/**
 	 * Create an application config. This first determines the config file path if any,

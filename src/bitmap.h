@@ -533,6 +533,8 @@ public:
 	 * @param sy source y position
 	 */
 	void MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Bitmap const& src, int sx, int sy);
+	/** dx and dy specify the reciprocal of the transform scale */
+	void MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Bitmap const& src, int sx, int sy, double dx, double dy);
 
 	/**
 	 * Blits constant color to this one through a mask bitmap.
@@ -544,6 +546,8 @@ public:
 	 * @param color source color.
 	 */
 	void MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Color const& color);
+	/** dx and dy specify the reciprocal of the transform scale */
+	void MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Color const& color, double dx, double dy);
 
 	/**
 	 * Blits source bitmap scaled 2:1, with no transparency.
@@ -608,6 +612,7 @@ public:
 
 	ImageOpacity ComputeImageOpacity() const;
 	ImageOpacity ComputeImageOpacity(Rect rect) const;
+	void SetBilinear();
 
 protected:
 	DynamicFormat format;

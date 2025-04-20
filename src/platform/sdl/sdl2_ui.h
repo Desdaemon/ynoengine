@@ -27,6 +27,10 @@
 #include <array>
 #include <SDL.h>
 
+#ifdef PLAYER_YNO
+#  include "multiplayer/webview.h"
+#endif
+
 extern "C" {
 	union SDL_Event;
 	struct SDL_Texture;
@@ -78,6 +82,13 @@ public:
 	AudioInterface& GetAudio() override;
 #endif
 
+	/** begin populating Input::text_input and Input::composition */
+	void BeginTextCapture(Rect* textbox = nullptr) override;
+	void EndTextCapture() override;
+	void Dispatch(Intent) override;
+	webview::webview& GetWebview();
+	void SetWebviewLayout(WebviewLayout) override;
+
 	/** @} */
 
 private:
@@ -109,6 +120,7 @@ private:
 	void ProcessControllerButtonEvent(SDL_Event &evnt);
 	void ProcessControllerAxisEvent(SDL_Event &evnt);
 	void ProcessFingerEvent(SDL_Event & evnt);
+	void ProcessTextEditEvent(SDL_Event& evnt);
 
 	/** @} */
 
@@ -130,6 +142,7 @@ private:
 	/** Main SDL window. */
 	SDL_Texture* sdl_texture_game = nullptr;
 	SDL_Texture* sdl_texture_scaled = nullptr;
+	SDL_Texture* sdl_texture_screen = nullptr;
 	SDL_Window* sdl_window = nullptr;
 	SDL_Renderer* sdl_renderer = nullptr;
 	SDL_Joystick *sdl_joystick = nullptr;
@@ -148,6 +161,16 @@ private:
 #ifdef SUPPORT_AUDIO
 	std::unique_ptr<AudioInterface> audio_;
 #endif
+
+	std::unique_ptr<webview::webview> webview;
+	std::thread webview_thread;
+	bool webview_visible = true;
+	bool webview_detach = false;
+	Rect webview_dims{};
+	void ModifyViewport();
+	void LayoutWebview();
 };
+
+inline webview::webview& Sdl2Ui::GetWebview() { return *webview.get(); }
 
 #endif

@@ -249,7 +249,13 @@ public:
 	}
 };
 
-using StringConfigParam = ConfigParam<std::string>;
+class StringConfigParam : public ConfigParam<std::string> {
+public:
+	explicit StringConfigParam(
+		std::string_view name, std::string_view description, std::string_view config_section, std::string_view config_key, std::string value = "", bool secret = false) :
+		ConfigParam<std::string>(name, description, config_section, config_key, value), secret(secret) {}
+	bool secret;
+};
 
 /** A configuration parameter with a range */
 template <typename T>

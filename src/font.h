@@ -27,6 +27,7 @@
 #include "string_view.h"
 #include <string>
 #include <lcf/scope_guard.h>
+#include <stddef.h>
 
 class Color;
 class Rect;
@@ -235,11 +236,15 @@ class Font {
 	static void SetDefault(FontRef new_default, bool use_mincho);
 	static FontRef NameText();
 	static void SetNameText(FontRef new_name_text, bool slim);
+	static FontRef ChatText();
+	static void SetChatText(FontRef new_chat_text);
 	static void ResetDefault();
 	static void ResetNameText();
 	static void Dispose();
 
 	static FontRef exfont;
+
+	static FontRef chat_font;
 
 	enum SystemColor {
 		ColorShadow = -1,
@@ -256,6 +261,7 @@ class Font {
 	virtual bool vCanShape() const { return false; }
 	virtual std::vector<ShapeRet> vShape(std::u32string_view) const { return {}; }
 	virtual void vApplyStyle(const Style& style) { (void)style; };
+	inline double GetScaleRatio() const { return current_style.size / (double)original_style.size; }
 
  protected:
 	Font(std::string_view name, int size, bool bold, bool italic);

@@ -101,6 +101,14 @@ Input::ButtonMappingArray Input::GetDefaultButtonMappings() {
 		{RESET, Keys::F12},
 		{FAST_FORWARD_A, Keys::F},
 		{FAST_FORWARD_B, Keys::G},
+		{SHOW_CHAT, Keys::TAB},
+		{CHAT_SCROLL_UP, Keys::UP},
+		{CHAT_SCROLL_UP, Keys::JOY_DPAD_UP},
+		{CHAT_SCROLL_UP, Keys::JOY_LSTICK_UP},
+		{CHAT_SCROLL_DOWN, Keys::DOWN},
+		{CHAT_SCROLL_DOWN, Keys::JOY_DPAD_DOWN},
+		{CHAT_SCROLL_DOWN, Keys::JOY_LSTICK_DOWN},
+		{TOGGLE_SIDEBAR, Keys::PAUSE},
 
 #if defined(USE_MOUSE) && defined(SUPPORT_MOUSE)
 		{MOUSE_LEFT, Keys::MOUSE_LEFT},

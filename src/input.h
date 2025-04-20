@@ -341,6 +341,24 @@ namespace Input {
 
 	bool IsWaitingInput();
 	void WaitInput(bool val);
+
+	struct Composition {
+	public:
+		/** if false, all other fields are considered garbage */
+		bool active = false;
+		std::string text = "";
+		int sel_start = 0;
+		int sel_length = 0;
+	};
+
+	/** The current composition received from IME */
+	extern Composition composition;
+	/** The text input received in this frame */
+	//extern std::array<char, 32> text_input;
+	extern std::string text_input;
+
+	/** `composition` has to be active before calling this function */
+	int RenderTextComposition(Bitmap& contents, int offset, int y, Font* font_ = nullptr);
 }
 
 #endif

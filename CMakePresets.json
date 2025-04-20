@@ -295,6 +295,22 @@
 			]
 		},
 		{
+			"name": "linux-ynoshell-relwithdebinfo",
+			"displayName": "Linux (ynoshell, RelWithDebInfo)",
+			"inherits": "linux-relwithdebinfo",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "linux-ynoshell-release",
+			"displayName": "Linux (ynoshell, Release)",
+			"inherits": "linux-release",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
 			"name": "windows-parent",
 			"cacheVariables": {
 				"VCPKG_TARGET_TRIPLET": "$env{VSCMD_ARG_TGT_ARCH}-windows-static"
@@ -635,6 +651,54 @@
 				"build-libretro",
 				"windows-x64-vs2022-parent",
 				"type-release"
+			]
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-debug",
+			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Debug)",
+			"inherits": "windows-x64-vs2022-debug",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-release",
+			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Release)",
+			"inherits": "windows-x64-vs2022-release",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (RelWithDebInfo)",
+			"inherits": "windows-x64-vs2022-relwithdebinfo",
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "ynoshell-parent",
+			"hidden": true,
+			"cacheVariables": {
+				"PLAYER_SHELL": "yno",
+				"VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/builds/cmake/Windows.MSVC.toolchain.cmake"
+			}
+		},
+		{
+			"name": "windows-ynoshell-release",
+			"displayName": "Windows (ynoshell) (Release)",
+			"inherits": [
+				"ynoshell-parent",
+				"windows-release"
+			]
+		},
+		{
+			"name": "windows-ynoshell-relwithdebinfo",
+			"displayName": "Windows (ynoshell) (RelWithDebInfo)",
+			"inherits": [
+				"ynoshell-parent",
+				"windows-relwithdebinfo"
 			]
 		},
 		{
@@ -1541,11 +1605,13 @@
 		},
 		{
 			"name": "windows-relwithdebinfo",
-			"configurePreset": "windows-relwithdebinfo"
+			"configurePreset": "windows-relwithdebinfo",
+			"configuration": "RelWithDebInfo"
 		},
 		{
 			"name": "windows-release",
-			"configurePreset": "windows-release"
+			"configurePreset": "windows-release",
+			"configuration": "Release"
 		},
 		{
 			"name": "windows-sdl3-debug",
@@ -1678,6 +1744,11 @@
 		{
 			"name": "windows-x64-vs2022-libretro-release",
 			"configurePreset": "windows-x64-vs2022-libretro-release"
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-release",
+			"configurePreset": "windows-x64-vs2022-ynoshell-release",
+			"configuration": "RelWithDebInfo"
 		},
 		{
 			"name": "macos-debug",

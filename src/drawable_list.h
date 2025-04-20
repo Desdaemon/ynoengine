@@ -131,6 +131,7 @@ class DrawableList {
 		 */
 		void Draw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z);
 
+		void Draw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z);
 	private:
 		std::vector<Drawable*> _list;
 		bool _dirty = false;

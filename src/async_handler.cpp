@@ -20,11 +20,24 @@
 #include <fstream>
 #include <map>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #ifdef EMSCRIPTEN
 #  include <emscripten.h>
 #  include <lcf/reader_util.h>
-#  include <nlohmann/json.hpp>
-   using json = nlohmann::json;
+#elif defined(PLAYER_YNO)
+#  include <lcf/reader_util.h>
+#  include <cpr/cpr.h>
+#  include <uv.h>
+#  include <mutex>
+#  include "platform.h"
+#  include "multiplayer/game_multiplayer.h"
+#  include "player.h"
+#  define EP_CONTAINER_OF(ptr, type, member) (type*)((char*)ptr - offsetof(type, member))
+#  if defined(_WIN32)
+#    define timegm _mkgmtime
+#  endif
 #endif
 
 #include "async_handler.h"
@@ -46,9 +59,25 @@ namespace {
 	std::unordered_map<std::string, std::shared_ptr<FileRequestAsync>> async_requests;
 	std::unordered_map<std::string, std::string> file_mapping;
 	int next_id = 0;
-#ifdef EMSCRIPTEN
 	int index_version = 1;
-#endif
+	int64_t db_lastwrite = LLONG_MAX;
+
+	std::vector<std::unique_ptr<cpr::Session>> session_pool;
+	std::mutex session_mutex{};
+
+	std::unique_ptr<cpr::Session> AcquireSession() {
+		std::lock_guard _guard(session_mutex);
+		if (session_pool.empty())
+			return std::make_unique<cpr::Session>();
+		std::unique_ptr<cpr::Session> out;
+		out.swap(session_pool.back());
+		session_pool.pop_back();
+		return out;
+	}
+	void ReleaseSession(std::unique_ptr<cpr::Session>&& session) {
+		std::lock_guard _guard(session_mutex);
+		session_pool.push_back(std::move(session));
+	}
 
 	FileRequestAsync* GetRequest(const std::string& path) {
 		auto it = async_requests.find(path);
@@ -72,20 +101,27 @@ namespace {
 		return std::make_shared<int>(next_id++);
 	}
 
-#ifdef EMSCRIPTEN
 	constexpr size_t ASYNC_MAX_RETRY_COUNT{ 16 };
 
 	struct async_download_context {
 		std::string url, file, param;
 		std::weak_ptr<FileRequestAsync> obj;
 		size_t count;
+#ifndef EMSCRIPTEN
+		uv_work_t uvctx;
+		int http_status = 500;
+#endif
 
 		async_download_context(
 			std::string u,
 			std::string f,
 			std::string p,
 			FileRequestAsync* o
-		) : url{ std::move(u) }, file{ std::move(f) }, param{ std::move(p) }, obj{ o->weak_from_this() }, count{} {}
+		) : url{ std::move(u) }, file{ std::move(f) }, param{ std::move(p) }, obj{ o->weak_from_this() }, count{}
+#ifndef EMSCRIPTEN
+			, uvctx{}
+#endif
+		{}
 	};
 
 	void download_success_retry(unsigned, void* userData, const char*) {
@@ -110,7 +146,7 @@ namespace {
 			if (flag1)
 				Output::Warning("DL Failure: max retries exceeded: {}", download_path);
 			else if (flag2)
-				Output::Warning("DL Failure: file not available: {}", download_path);
+				Output::Warning("DL Failure: file not available: {} ({})", download_path, status);
 
 			if (sobj)
 				sobj->DownloadDone(false);
@@ -121,7 +157,9 @@ namespace {
 		start_async_wget_with_retry(ctx);
 	}
 
+
 	void start_async_wget_with_retry(async_download_context* ctx) {
+#ifdef EMSCRIPTEN
 		emscripten_async_wget2(
 			ctx->url.data(),
 			ctx->file.data(),
@@ -132,8 +170,66 @@ namespace {
 			download_failure_retry,
 			nullptr
 		);
-	}
+#else
+		uv_queue_work(uv_default_loop(), &ctx->uvctx,
+		[](uv_work_t *task) {
+			auto ctx = EP_CONTAINER_OF(task, async_download_context, uvctx);
+			auto sobj = ctx->obj.lock();
+			if (sobj) {
+				std::string url_(ctx->url);
+				std::string path_(ctx->file);
+				if (path_.empty())
+					path_ = sobj->GetPath();
+				if (!sobj->GetRequestExtension().empty()) {
+					url_ += sobj->GetRequestExtension();
+					path_ += sobj->GetRequestExtension();
+				}
 
+				Platform::File handle(FileFinder::MakeCanonical(fmt::format("{}/..", path_), 0));
+				handle.MakeDirectory(true);
+
+				std::ofstream out(std::filesystem::u8path(path_), std::ios::binary);
+
+				auto session = AcquireSession();
+				session->SetUrl(cpr::Url{ url_ });
+				auto resp = session->Download(out);
+				out.flush();
+				ReleaseSession(std::move(session));
+
+				ctx->http_status = resp.status_code;
+				if (resp.status_code == 0) {
+					ctx->http_status = 1000 + (int)resp.error.code;
+					Output::Debug("failed {}: {}", resp.error.message);
+				}
+				if (ctx->file == "RPG_RT.ldb") {
+					// use this file to determine cache freshness
+					if (auto lm = resp.header.find("last-modified"); lm != resp.header.end()) {
+						std::tm time{};
+						std::istringstream ss(lm->second);
+						ss >> std::get_time(&time, "%a, %d %b %Y %H:%M:%S");
+						if (ss.fail())
+							Output::Debug("could not parse Last-Modified: {}", lm->second);
+						else {
+							Output::Debug("ldb last-modified: {}", lm->second);
+							db_lastwrite = timegm(&time);
+						}
+					}
+				}
+			}
+		},
+		[](uv_work_t *task, int status) {
+			auto ctx = EP_CONTAINER_OF(task, async_download_context, uvctx);
+			if (status) {
+				Output::Debug("Task cancelled ({})", status);
+				return download_failure_retry(0, ctx, 500);
+			}
+			if (ctx->http_status >= 200 && ctx->http_status < 300)
+				download_success_retry(0, ctx, "");
+			else
+				download_failure_retry(0, ctx, ctx->http_status);
+		});
+#endif
+	}
 	void async_wget_with_retry(
 		std::string url,
 		std::string file,
@@ -144,21 +240,18 @@ namespace {
 		auto ctx = new async_download_context{ url, file, param, obj };
 		start_async_wget_with_retry(ctx);
 	}
-
-#endif
 }
 
 void AsyncHandler::CreateRequestMapping(const std::string& file) {
-#ifdef EMSCRIPTEN
 	auto f = FileFinder::Game().OpenInputStream(file);
 	if (!f) {
-		Output::Error("Emscripten: Reading index.json failed");
+		Output::Error("Reading index.json failed");
 		return;
 	}
 
 	json j = json::parse(f, nullptr, false);
 	if (j.is_discarded()) {
-		Output::Error("Emscripten: index.json is not a valid JSON file");
+		Output::Error("index.json is not a valid JSON file");
 		return;
 	}
 
@@ -216,10 +309,6 @@ void AsyncHandler::CreateRequestMapping(const std::string& file) {
 			}
 		}
 	}
-#else
-	// no-op
-	(void)file;
-#endif
 }
 
 void AsyncHandler::ClearRequests() {
@@ -232,6 +321,7 @@ void AsyncHandler::ClearRequests() {
 		}
 	}
 	async_requests.clear();
+	db_lastwrite = LLONG_MAX;
 }
 
 FileRequestAsync* AsyncHandler::RequestFile(std::string_view folder_name, std::string_view file_name) {
@@ -243,7 +333,6 @@ FileRequestAsync* AsyncHandler::RequestFile(std::string_view folder_name, std::s
 		return request;
 	}
 
-	//Output::Debug("Waiting for {}", path);
 	Web_API::OnRequestFile(path);
 
 	return RegisterRequest(std::move(path), std::string(folder_name), std::string(file_name));
@@ -289,6 +378,9 @@ void AsyncHandler::SaveFilesystem(int slot_id) {
 			onSaveSlotUpdated($0);
 		});
 	}, slot_id);
+#elif defined(PLAYER_YNO)
+	if (slot_id != 1) return;
+	GMI().UploadSaveFile();
 #endif
 }
 
@@ -305,7 +397,8 @@ FileRequestAsync::FileRequestAsync(std::string path, std::string directory, std:
 	file(std::move(file)),
 	path(std::move(path)),
 	state(State_WaitForStart)
-{ }
+{
+}
 
 void FileRequestAsync::SetGraphicFile(bool graphic) {
 	this->graphic = graphic;
@@ -336,18 +429,21 @@ void FileRequestAsync::Start() {
 
 	state = State_Pending;
 
-#ifdef EMSCRIPTEN
+#if defined(EMSCRIPTEN) || defined(PLAYER_YNO)
 	std::string request_path;
 #  ifdef EM_GAME_URL
 	request_path = EM_GAME_URL;
 #  else
-	request_path = "games/";
+	if (parent_scope)
+		request_path = "https://ynoproject.net/";
+	else
+		request_path = "https://ynoproject.net/data/";
 #  endif
 
 	if (!Player::emscripten_game_name.empty()) {
 		request_path += Player::emscripten_game_name + "/";
 	} else {
-		request_path += "default/";
+		request_path += "2kki/";
 	}
 
 	std::string modified_path;
@@ -374,13 +470,18 @@ void FileRequestAsync::Start() {
 		}
 	}
 
+
 	auto it = file_mapping.find(modified_path);
 	if (it != file_mapping.end()) {
 		request_path += it->second;
 	} else {
-		if (file_mapping.empty()) {
+		if (file_mapping.empty() || parent_scope) {
 			// index.json not fetched yet, fallthrough and fetch
-			request_path += path;
+			std::string path_(this->path);
+			size_t offset;
+			if (parent_scope && (offset = path_.find("../")) != std::string::npos)
+				path_ = path_.substr(offset + 3);
+			request_path += path_;
 		} else {
 			// Fire immediately (error)
 			Output::Debug("{} not in index.json", modified_path);
@@ -393,8 +494,17 @@ void FileRequestAsync::Start() {
 	request_path = Utils::ReplaceAll(request_path, "%", "%25");
 	request_path = Utils::ReplaceAll(request_path, "#", "%23");
 	request_path = Utils::ReplaceAll(request_path, "+", "%2B");
+	request_path = Utils::ReplaceAll(request_path, " ", "%20");
 
-	auto request_file = (it != file_mapping.end() ? it->second : path);
+	std::string request_file = (it != file_mapping.end() ? it->second : path);
+
+#ifndef EMSCRIPTEN
+	if (Platform::File(request_path).GetLastModified() >= db_lastwrite) {
+		DownloadDone(true);
+		return;
+	}
+#endif
+
 	async_wget_with_retry(request_path, std::move(request_file), "", this);
 #else
 #  ifdef EM_GAME_URL
@@ -455,14 +565,12 @@ void FileRequestAsync::DownloadDone(bool success) {
 	}
 
 	if (success) {
-#ifdef EMSCRIPTEN
 		if (state == State_Pending) {
 			// Update directory structure (new file was added)
 			if (FileFinder::Game()) {
 				FileFinder::Game().ClearCache();
 			}
 		}
-#endif
 
 		state = State_DoneSuccess;
 

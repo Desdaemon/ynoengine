@@ -30,6 +30,10 @@
 #include "drawable_mgr.h"
 #include "baseui.h"
 #include "game_clock.h"
+#ifdef PLAYER_YNO
+#  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
+#endif
 
 using namespace std::chrono_literals;
 
@@ -40,6 +44,10 @@ namespace Graphics {
 
 	std::unique_ptr<MessageOverlay> message_overlay;
 	std::unique_ptr<FpsOverlay> fps_overlay;
+#ifdef PLAYER_YNO
+	std::unique_ptr<ChatOverlay> chat_overlay;
+	std::unique_ptr<StatusOverlay> status_overlay;
+#endif
 
 	std::string window_title_key;
 }
@@ -50,11 +58,15 @@ void Graphics::Init() {
 
 	message_overlay = std::make_unique<MessageOverlay>();
 	fps_overlay = std::make_unique<FpsOverlay>();
+	chat_overlay = std::make_unique<ChatOverlay>();
+	status_overlay = std::make_unique<StatusOverlay>();
 }
 
 void Graphics::Quit() {
 	fps_overlay.reset();
 	message_overlay.reset();
+	chat_overlay.reset();
+	status_overlay.reset();
 
 	Cache::ClearAll();
 
@@ -104,28 +116,31 @@ void Graphics::UpdateTitle() {
 #endif
 }
 
-void Graphics::Draw(Bitmap& dst) {
+void Graphics::Draw(BaseUi& ui) {
 	auto& transition = Transition::instance();
 
 	auto min_z = std::numeric_limits<Drawable::Z_t>::min();
-	auto max_z = std::numeric_limits<Drawable::Z_t>::max();
+	auto constexpr max_z = std::numeric_limits<Drawable::Z_t>::max();
+	auto& dst = *ui.GetDisplaySurface();
+	auto& dst_screen = *ui.GetScreenSurface();
 	if (transition.IsActive()) {
 		min_z = transition.GetZ();
 	} else if (transition.IsErasedNotActive()) {
 		min_z = transition.GetZ() + 1;
 		dst.Clear();
+		dst_screen.Clear();
 	}
-	LocalDraw(dst, min_z, max_z);
+	LocalDraw(dst, dst_screen, min_z, max_z);
 }
 
-void Graphics::LocalDraw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z) {
+void Graphics::LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z) {
 	auto& drawable_list = DrawableMgr::GetLocalList();
 
 	if (!drawable_list.empty() && min_z == std::numeric_limits<Drawable::Z_t>::min()) {
 		current_scene->DrawBackground(dst);
 	}
 
-	drawable_list.Draw(dst, min_z, max_z);
+	drawable_list.Draw(dst, dst_screen, min_z, max_z);
 }
 
 std::shared_ptr<Scene> Graphics::UpdateSceneCallback() {
@@ -149,3 +164,12 @@ MessageOverlay& Graphics::GetMessageOverlay() {
 	return *message_overlay;
 }
 
+#ifdef PLAYER_YNO
+ChatOverlay& Graphics::GetChatOverlay() {
+	return *chat_overlay;
+}
+
+StatusOverlay& Graphics::GetStatusOverlay() {
+	return *status_overlay;
+}
+#endif

@@ -27,6 +27,17 @@
 #include "pending_message.h"
 #include "memory_management.h"
 
+#ifdef PLAYER_YNO
+#  include <variant>
+#  include <optional>
+#  include <type_traits>
+#  include <lcf/span.h>
+#  include "point.h"
+class ChatComponent;
+class TextSpan;
+#  include "multiplayer/chat_overlay.h"
+#endif
+
 class Window_Message;
 class AsyncOp;
 
@@ -82,6 +93,11 @@ namespace Game_Message {
 	 */
 	int WordWrap(std::string_view line, int limit, const WordWrapCallback& callback);
 	int WordWrap(std::string_view line, int limit, const WordWrapCallback& callback, const Font& font);
+
+#ifdef PLAYER_YNO
+	using ComponentWrapCallback = const std::function<void(lcf::Span<std::shared_ptr<ChatComponent>> spans)>;
+	int WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const ComponentWrapCallback& callback, const Font& font);
+#endif
 
 	/**
 	 * Return if it's legal to show a new message box.

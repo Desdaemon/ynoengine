@@ -37,6 +37,11 @@
 #include <ctime>
 #include <memory>
 
+#ifdef PLAYER_YNO
+#  include "multiplayer/game_multiplayer.h"
+#  include "multiplayer/scene_nexus.h"
+#endif
+
 Scene_Logo::Scene_Logo() :
 	frame_counter(0) {
 	type = Scene::Logo;
@@ -115,9 +120,16 @@ void Scene_Logo::vUpdate() {
 				std::string save_name = save.FindFile(ss.str());
 				Player::LoadSavegame(save_name, Player::load_game_id);
 			}
+#ifdef PLAYER_YNO
+				GMI().InitSession();
+#endif
 		}
 		else {
+#ifdef PLAYER_YNO
+			Scene::Push(std::make_shared<Scene_Nexus>(), true);
+#else
 			Scene::Push(std::make_shared<Scene_GameBrowser>(), true);
+#endif
 		}
 	}
 }
@@ -132,20 +144,24 @@ bool Scene_Logo::DetectGame() {
 		FileFinder::SetGameFilesystem(fs);
 	}
 
-#ifdef EMSCRIPTEN
-	static bool once = true;
-	if (once) {
+#ifdef PLAYER_YNO
+	if (Player::emscripten_game_name.empty()) {
+		async_ready = true;
+		return true;
+	}
+#endif
+
+	//static bool once = true;
+	if (!request_id) {
 		FileRequestAsync* index = AsyncHandler::RequestFile("index.json");
 		index->SetImportantFile(true);
 		request_id = index->Bind(&Scene_Logo::OnIndexReady, this);
-		once = false;
 		index->Start();
 		return false;
 	}
 	if (!async_ready) {
 		return false;
 	}
-#endif
 
 	if (FileFinder::IsValidProject(fs) || FileFinder::OpenViewToEasyRpgFile(fs)) {
 		FileFinder::SetGameFilesystem(fs);

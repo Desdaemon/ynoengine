@@ -31,6 +31,13 @@
 #  include <emscripten.h>
 #endif
 
+#ifdef PLAYER_YNO
+#  include <uv.h>
+#  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
+#  include "web_api.h"
+#endif
+
 #include "async_handler.h"
 #include "audio.h"
 #include "cache.h"
@@ -136,9 +143,8 @@ namespace Player {
 	int rng_seed = -1;
 	Game_ConfigPlayer player_config;
 	Game_ConfigGame game_config;
-#ifdef EMSCRIPTEN
+	std::function<void(Game_Config&)> did_parse_config;
 	std::string emscripten_game_name;
-#endif
 }
 
 namespace {
@@ -200,6 +206,9 @@ void Player::Init(std::vector<std::string> args) {
 
 	Input::Init(cfg.input, replay_input_path, record_input_path);
 	Input::AddRecordingData(Input::RecordingData::CommandLine, command_line);
+#ifdef PLAYER_YNO
+	GMI().SetConfig(cfg.online);
+#endif
 
 	player_config = std::move(cfg.player);
 	speed_modifier_a = cfg.input.speed_modifier_a.Get();
@@ -241,6 +250,8 @@ void Player::MainLoop() {
 		return;
 	}
 
+	uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+
 	int num_updates = 0;
 	while (Game_Clock::NextGameTimeStep()) {
 		if (num_updates > 0) {
@@ -257,6 +268,10 @@ void Player::MainLoop() {
 		Scene::instance->MainFunction();
 
 		Graphics::GetMessageOverlay().Update();
+#ifdef PLAYER_YNO
+		Graphics::GetChatOverlay().Update();
+		Graphics::GetStatusOverlay().Update();
+#endif
 
 		++num_updates;
 	}
@@ -286,6 +301,7 @@ void Player::MainLoop() {
 		iframe.End();
 		Game_Clock::SleepFor(next - now);
 	}
+
 }
 
 void Player::Pause() {
@@ -309,6 +325,14 @@ void Player::UpdateInput() {
 	if (Input::IsSystemTriggered(Input::SHOW_LOG)) {
 		Output::ToggleLog();
 	}
+#ifdef PLAYER_YNO
+	if (Input::IsSystemTriggered(Input::SHOW_CHAT)) {
+		Graphics::GetChatOverlay().SetShowAll();
+	}
+	if (Input::IsSystemTriggered(Input::TOGGLE_SIDEBAR)) {
+		DisplayUi->Dispatch(BaseUi::Intent::ToggleWebview);
+	}
+#endif
 	if (Input::IsSystemTriggered(Input::TOGGLE_ZOOM)) {
 		DisplayUi->ToggleZoom();
 	}
@@ -383,8 +407,9 @@ void Player::Update(bool update_scene) {
 
 void Player::Draw() {
 	Graphics::Update();
-	Graphics::Draw(*DisplayUi->GetDisplaySurface());
+	Graphics::Draw(*DisplayUi);
 	DisplayUi->UpdateDisplay();
+	DisplayUi->GetScreenSurface()->Clear();
 }
 
 void Player::IncFrame() {
@@ -660,17 +685,17 @@ Game_Config Player::ParseCommandLine() {
 			exit(0);
 			break;
 		}*/
-#ifdef EMSCRIPTEN
 		if (cp.ParseNext(arg, 1, "--game")) {
 			if (arg.NumValues() > 0) {
 				emscripten_game_name = arg.Value(0);
 			}
 			continue;
 		}
-#endif
 		cp.SkipNext();
 	}
 
+	if (Player::did_parse_config)
+		Player::did_parse_config(cfg);
 	return cfg;
 }
 
@@ -1110,6 +1135,11 @@ void Player::LoadFonts() {
 	auto name_text = FileFinder::OpenFont("NameText");
 	if (name_text) {
 		Font::SetNameText(Font::CreateFtFont(std::move(name_text), 11, false, false), false);
+	}
+
+	auto chat_text = FileFinder::OpenFont("NameText");
+	if (chat_text) {
+		Font::SetChatText(Font::CreateFtFont(std::move(chat_text), 11, false, false));
 	}
 
 	auto name_text_2 = FileFinder::OpenFont("NameText2");

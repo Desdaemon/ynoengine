@@ -56,9 +56,13 @@ public:
 	using SystemMessageHandler = std::function<void (Connection&)>;
 	void RegisterSystemHandler(SystemMessage m, SystemMessageHandler h);
 
+	template <typename F>
+	inline void RegisterRawHandler(F&& callback) { raw_handler = callback; }
+
 	void Dispatch(std::string_view name, ParameterList args = ParameterList());
 
 	bool IsConnected() const { return connected; }
+	inline volatile void* ConnectedFutex() { return static_cast<volatile void*>(&connected); }
 
 	virtual ~Connection() = default;
 
@@ -75,6 +79,7 @@ protected:
 	void DispatchSystem(SystemMessage m);
 
 	std::map<std::string, std::function<void (const ParameterList&)>> handlers;
+	std::function<void(std::string_view, std::string_view)> raw_handler;
 	SystemMessageHandler sys_handlers[static_cast<size_t>(SystemMessage::_PLACEHOLDER)];
 
 	uint32_t key;

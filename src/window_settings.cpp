@@ -18,6 +18,7 @@
 // Headers
 #include <sstream>
 #include <utility>
+#include <algorithm>
 #include "game_map.h"
 #include "input.h"
 #include "text.h"
@@ -37,6 +38,10 @@
 
 #ifdef EMSCRIPTEN
 #  include "platform/emscripten/interface.h"
+#endif
+
+#ifdef PLAYER_YNO
+#  include "multiplayer/messages.h"
 #endif
 
 class MenuItem final : public ConfigParam<std::string_view> {
@@ -61,7 +66,12 @@ void Window_Settings::DrawOption(int index) {
 	Font::SystemColor color = enabled ? option.color : Font::ColorDisabled;
 
 	contents->TextDraw(rect, color, option.text);
-	contents->TextDraw(rect, color, option.value_text, Text::AlignRight);
+	if (!option.secret)
+		contents->TextDraw(rect, color, option.value_text, Text::AlignRight);
+	else {
+		std::string value(std::min((size_t)10, option.value_text.size()), '*');
+		contents->TextDraw(rect, color, value, Text::AlignRight);
+	}
 }
 
 Window_Settings::StackFrame& Window_Settings::GetFrame(int n) {
@@ -152,12 +162,16 @@ void Window_Settings::Refresh() {
 		case eLicense:
 			RefreshLicense();
 			break;
+		case eOnlineAccount:
+			RefreshOnline();
+			break;
 		case eInputButtonCategory:
 			RefreshButtonCategory();
 			break;
 		case eInputListButtonsGame:
 		case eInputListButtonsEngine:
 		case eInputListButtonsDeveloper:
+		case eInputListButtonsOnline:
 			RefreshButtonList();
 			break;
 		default:
@@ -267,6 +281,22 @@ void Window_Settings::AddOption(const EnumConfigParam<T, S>& param,
 	if (!param.IsLocked()) {
 		opt.action = std::forward<Action>(action);
 	}
+	GetFrame().options.push_back(std::move(opt));
+}
+
+template <typename Action>
+void Window_Settings::AddOption(const StringConfigParam& param, Action&& action) {
+	if (!param.IsOptionVisible()) {
+		return;
+	}
+	Option opt;
+	opt.text = ToString(param.GetName());
+	opt.help = ToString(param.GetDescription());
+	opt.value_text = param.Get();
+	opt.mode = eOptionStringInput;
+	opt.secret = param.secret;
+	if (!param.IsLocked())
+		opt.action = std::forward<Action>(action);
 	GetFrame().options.push_back(std::move(opt));
 }
 
@@ -622,6 +652,8 @@ void Window_Settings::RefreshButtonCategory() {
 		[this]() { Push(eInputListButtonsEngine, 1); });
 	AddOption(MenuItem("Developer", "Buttons useful for developers", ""),
 		[this]() { Push(eInputListButtonsDeveloper, 2); });
+	AddOption(MenuItem("Online", "Buttons related to online play", ""),
+		[this]() { Push(eInputListButtonsOnline, 3);  });
 }
 
 void Window_Settings::RefreshButtonList() {
@@ -639,12 +671,14 @@ void Window_Settings::RefreshButtonList() {
 		case 1:
 			buttons = {Input::SETTINGS_MENU, Input::TOGGLE_FPS, Input::TOGGLE_FULLSCREEN, Input::TOGGLE_ZOOM,
 				Input::TAKE_SCREENSHOT, Input::RESET, Input::FAST_FORWARD_A, Input::FAST_FORWARD_B,
-				Input::PAGE_UP, Input::PAGE_DOWN };
+				Input::PAGE_UP, Input::PAGE_DOWN, };
 			break;
 		case 2:
 			buttons = {	Input::DEBUG_MENU, Input::DEBUG_THROUGH, Input::DEBUG_SAVE, Input::DEBUG_ABORT_EVENT,
 				Input::SHOW_LOG };
 			break;
+		case 3:
+			buttons = { Input::SHOW_CHAT, Input::CHAT_SCROLL_UP, Input::CHAT_SCROLL_DOWN, Input::TOGGLE_SIDEBAR };
 	}
 
 	for (auto b: buttons) {
@@ -722,4 +756,67 @@ void Window_Settings::RefreshButtonList() {
 				Push(eInputButtonOption, static_cast<int>(button));
 			});
 	}
+}
+
+void Window_Settings::RefreshOnline() {
+	Game_ConfigOnline& cfg = GMI().GetConfig();
+
+	using LockedMenuItem = LockedConfigParam<std::string_view>;
+
+	if (!cfg.username.Get().empty() && !cfg.session_token.Get().empty()) {
+		AddOption(LockedMenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});
+		AddOption(MenuItem("Logout", "", ""), [this] {
+			Scene::PopUntil(Scene::SceneType::Map);
+			GMI().Logout();
+			Refresh();
+		});
+	}
+	else {
+		if (cfg.username.Get().empty())
+			AddOption(LockedMenuItem("Status", "", "Username not set"), [] {});
+		else
+			AddOption(LockedMenuItem("Status", "", fmt::format("Playing as guest user")), [] {});
+
+		AddOption(cfg.username, [this, &cfg] {
+			auto& value = GetCurrentOption().value_text;
+			if (!value.empty() && GMI().sessionConn.IsConnected() && Input::IsRawKeyTriggered(Input::Keys::RETURN)) {
+				cfg.username.Set(value);
+				GMI().SetNickname(value);
+			}
+		});
+		AddOption(cfg.password, [this, &cfg] {
+			cfg.password.Set(GetCurrentOption().value_text);
+		});
+		auto& failure = GMI().login_failure;
+		if (!failure.empty()) {
+			if (failure.find("bad login") != std::string::npos)
+				AddOption(LockedMenuItem("Invalid username or password", "", ""), [] {});
+			else
+				AddOption(LockedMenuItem("Could not login", "", failure), [] {});
+		}
+		AddOption(MenuItem("Login", "", ""), [this, &cfg] {
+			Scene::PopUntil(Scene::SceneType::Map);
+			GMI().Login(cfg.username.Get(), cfg.password.Get());
+			cfg.password.Set("");
+			Refresh();
+		});
+		GetFrame().options.back().color = Font::ColorCritical;
+		AddOption(MenuItem("Register", "", ""), [this, &cfg] {
+			Output::Warning("Register not implemented");
+			cfg.password.Set("");
+			Refresh();
+		});
+	}
+
+	AddOption(cfg.nametag_mode, [this, &cfg] {
+		int option = GetCurrentOption().current_value;
+		cfg.nametag_mode.Set((ConfigEnum::NametagMode)option);
+		GMI().SetNametagMode(option);
+	});
+
+	// some debug options
+	AddOption(MenuItem("[DEBUG] Force Reconnect", "", ""), [] {
+		Scene::PopUntil(Scene::SceneType::Map);
+		GMI().sessionConn.Open(GMI().GetSessionEndpoint());
+	});
 }

@@ -256,6 +256,11 @@ ImageOpacity Bitmap::ComputeImageOpacity(Rect rect) const {
 		ImageOpacity::Alpha_8Bit;
 }
 
+void Bitmap::SetBilinear() {
+	pixman_image_set_filter(bitmap.get(), PIXMAN_FILTER_BILINEAR, nullptr, 0);
+	pixman_image_set_component_alpha(bitmap.get(), true);
+}
+
 void Bitmap::CheckPixels(uint32_t flags) {
 	if (flags & Flag_System) {
 		DynamicFormat format(32,8,24,8,16,8,8,8,0,PF::Alpha);
@@ -1094,6 +1099,10 @@ void Bitmap::Flip(bool horizontal, bool vertical) {
 }
 
 void Bitmap::MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Color const& color) {
+	return MaskedBlit(dst_rect, mask, mx, my, color, 1., 1.);
+}
+
+void Bitmap::MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Color const& color, double dx, double dy) {
 	pixman_color_t tcolor = {
 		static_cast<uint16_t>(color.red << 8),
 		static_cast<uint16_t>(color.green << 8),
@@ -1102,21 +1111,41 @@ void Bitmap::MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my
 
 	auto source = PixmanImagePtr{ pixman_image_create_solid_fill(&tcolor) };
 
+	Transform xform = Transform::Scale(dx, dy);
+	if (dx != 1 || dy != 1) {
+		pixman_image_set_transform(source.get(), &xform.matrix);
+		pixman_image_set_transform(mask.bitmap.get(), &xform.matrix);
+	}
+
 	pixman_image_composite32(PIXMAN_OP_OVER,
 							 source.get(), mask.bitmap.get(), bitmap.get(),
 							 0, 0,
 							 mx, my,
 							 dst_rect.x, dst_rect.y,
 							 dst_rect.width, dst_rect.height);
+	pixman_image_set_transform(mask.bitmap.get(), nullptr);
 }
 
 void Bitmap::MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Bitmap const& src, int sx, int sy) {
+	return MaskedBlit(dst_rect, mask, mx, my, src, sx, sy, 1., 1.);
+}
+
+void Bitmap::MaskedBlit(Rect const& dst_rect, Bitmap const& mask, int mx, int my, Bitmap const& src, int sx, int sy, double dx, double dy) {
+	Transform xform = Transform::Scale(dx, dy);
+	if (dx != 1 || dy != 1) {
+		sx = ceilf(sx / dx);
+		sy = ceilf(sy / dy);
+		pixman_image_set_transform(src.bitmap.get(), &xform.matrix);
+		pixman_image_set_transform(mask.bitmap.get(), &xform.matrix);
+	}
 	pixman_image_composite32(PIXMAN_OP_OVER,
 							 src.bitmap.get(), mask.bitmap.get(), bitmap.get(),
 							 sx, sy,
 							 mx, my,
 							 dst_rect.x, dst_rect.y,
 							 dst_rect.width, dst_rect.height);
+	pixman_image_set_transform(src.bitmap.get(), nullptr);
+	pixman_image_set_transform(mask.bitmap.get(), nullptr);
 }
 
 void Bitmap::Blit2x(Rect const& dst_rect, Bitmap const& src, Rect const& src_rect) {

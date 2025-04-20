@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16...3.31 FATAL_ERROR)
 project(EasyRPG_Player VERSION 0.8
 	DESCRIPTION "Interpreter for RPG Maker 2000/2003 games"
 	HOMEPAGE_URL "https://easyrpg.org"
-	LANGUAGES CXX)
+	LANGUAGES C CXX)
 
 # Extra CMake Module files
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/builds/cmake/Modules")
@@ -13,6 +13,8 @@ include(PlayerFindPackage)
 include(PlayerBuildType)
 include(PlayerMisc)
 include(GetGitRevisionDescription)
+include(CheckCSourceCompiles)
+include(FetchContent)
 
 # Dependencies provided by CMake Presets
 option(PLAYER_FIND_ROOT_PATH_APPEND "When enabled the items from CMAKE_PREFIX_PATH are added to CMAKE_FIND_ROOT_PATH. Works around problematic CMake Toolchain files" OFF)
@@ -237,6 +239,10 @@ add_library(${PROJECT_NAME} OBJECT
 	src/image_png.h
 	src/image_xyz.cpp
 	src/image_xyz.h
+	src/image_webp.cpp
+	src/image_webp.h
+	src/image_gif.cpp
+	src/image_gif.h
 	src/input_buttons_desktop.cpp
 	src/input_buttons.h
 	src/input.cpp
@@ -500,7 +506,33 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/multiplayer/playerother.h
 	src/multiplayer/playerother.cpp
 	src/external/TinySHA1.hpp
+	src/icons.h
+	src/icons.cpp
+	src/multiplayer/overlay_utils.h
+
+	# to be upstreamed
+	src/window_stringinput.h
+	src/window_stringinput.cpp
 )
+
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+	target_sources(${PROJECT_NAME} PRIVATE
+		src/multiplayer/chat_overlay.h
+		src/multiplayer/chat_overlay.cpp
+		src/multiplayer/status_overlay.h
+		src/multiplayer/status_overlay.cpp
+		src/multiplayer/scene_overlay.h
+		src/multiplayer/scene_overlay.cpp
+		src/multiplayer/scene_online.h
+		src/multiplayer/scene_online.cpp
+		src/multiplayer/scene_nexus.h
+		src/multiplayer/scene_nexus.cpp
+		src/multiplayer/webview.h
+	)
+	if(WIN32)
+		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress
+	endif()
+endif()
 
 include(CMakeDependentOption)
 
@@ -594,6 +626,33 @@ endif()
 set(PLAYER_BUILD_EXECUTABLE ON)
 set(PLAYER_TEST_LIBRARIES ${PROJECT_NAME})
 
+set(PLAYER_SHELL "none" CACHE STRING "Optional UI shell, options: none yno")
+set_property(CACHE PLAYER_SHELL PROPERTY STRINGS none yno)
+
+if(${PLAYER_SHELL} STREQUAL "yno")
+	set(PLAYER_YNO TRUE)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_YNO)
+
+	#player_find_package(NAME wxWidgets REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} wx::core wx::base)
+	#find_package(unofficial-webview2 CONFIG REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} unofficial::webview2::webview2)
+	FetchContent_Declare(webview
+		GIT_REPOSITORY https://github.com/webview/webview
+		GIT_TAG 0.12.0)
+	FetchContent_MakeAvailable(webview)
+	target_link_libraries(${PROJECT_NAME} webview::core)
+
+	player_find_package(NAME GIF TARGET GIF::GIF REQUIRED)
+	find_package(WebP CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} WebP::webp WebP::webpdecoder WebP::webpdemux)
+
+elseif(${PLAYER_SHELL} STREQUAL "none")
+	# do nothing
+else()
+	message(FATAL_ERROR "Invalid shell ${PLAYER_SHELL}")
+endif()
+
 if(ANDROID AND PLAYER_GRADLE_BUILD)
 	# Build invoked by Gradle
 	# Ugly: Gradle has no way to branch based on the ABI
@@ -633,7 +692,8 @@ elseif(PLAYER_TARGET_PLATFORM STREQUAL "SDL2")
 		TARGET SDL2::SDL2
 		REQUIRED)
 
-	if(TARGET SDL2::SDL2main)
+	if(TARGET SDL2::SDL2main #AND ${PLAYER_SHELL} STREQUAL "none"
+	)
 		target_link_libraries(${PROJECT_NAME} SDL2::SDL2main)
 	endif()
 
@@ -943,7 +1003,7 @@ if(PLAYER_BUILD_LIBLCF)
 	target_link_libraries(${PROJECT_NAME} lcf)
 else()
 	# Use system package
-	player_find_package(NAME liblcf VERSION 0.8
+	player_find_package(NAME liblcf VERSION 0.8.1
 		TARGET liblcf::liblcf
 		REQUIRED)
 endif()
@@ -1010,6 +1070,37 @@ else()
 		TARGET nlohmann_json::nlohmann_json
 		ONLY_CONFIG
 	)
+
+	find_package(Libwebsockets CONFIG REQUIRED)
+	# require_lws_config(LWS_ROLE_H1 1 requirements)
+	# require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
+	# require_lws_config(LWS_WITH_TLS 1 requirements)
+
+	# uses system trust store
+	# require_lws_config(LWS_WITH_MBEDTLS 0 requirements)
+	# require_lws_config(LWS_WITH_WOLFSSL 0 requirements)
+	# require_lws_config(LWS_WITH_CYASSL 0 requirements)
+
+	if(websockets_shared)
+		target_link_libraries(${PROJECT_NAME} websockets_shared ${LIBWEBSOCKETS_DEP_LIBS})
+		add_dependencies(${PROJECT_NAME} websockets_shared)
+	else()
+		target_link_libraries(${PROJECT_NAME} websockets ${LIBWEBSOCKETS_DEP_LIBS})
+	endif()
+
+	#find_package(websocketpp REQUIRED)
+	#add_dependencies(${PROJECT_NAME} websocketpp::websocketpp)
+	#find_package(httplib CONFIG REQUIRED)
+	#target_link_libraries(${PROJECT_NAME} httplib::httplib)
+	find_package(cpr CONFIG)
+	if(NOT cpr_FOUND)
+		include(FetchContent)
+		FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
+								GIT_TAG dec9422db3af470641f8b0d90e4b451c4daebf64) # Replace with your desired git commit from: https://github.com/libcpr/cpr/releases
+
+		FetchContent_MakeAvailable(cpr)
+	endif()
+	target_link_libraries(${PROJECT_NAME} cpr::cpr)
 endif()
 
 # Configure Audio backends
@@ -1193,6 +1284,8 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set(EXE_NAME ${PROJECT_NAME}_exe)
 		if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 			add_executable(${EXE_NAME} "src/platform/emscripten/main.cpp")
+		#elseif(PLAYER_YNO)
+			#add_executable(${EXE_NAME} "src/platform/ynoshell/main.cpp")
 		else()
 			add_executable(${EXE_NAME} "src/platform/sdl/main.cpp")
 		endif()
@@ -1201,7 +1294,8 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 	if(WIN32)
 		# Open console for Debug builds
-		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		#set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE $<$<NOT:$<CONFIG:Debug>>:TRUE>)
+		set_target_properties(${EXE_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 
 		# Add resources
 		string(REPLACE "." "," RC_VERSION ${PROJECT_VERSION})
@@ -1216,6 +1310,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 
 		# Change executable name
 		set_target_properties(${EXE_NAME} PROPERTIES OUTPUT_NAME "Player")
+		target_link_libraries(${EXE_NAME} dbghelp)
 	endif()
 
 	target_link_libraries(${EXE_NAME} ${PROJECT_NAME})
@@ -1716,6 +1811,22 @@ message(STATUS "")
 if (${PLAYER_TARGET_PLATFORM} STREQUAL "SDL1")
 	message(WARNING "SDL1 is deprecated!")
 	message(WARNING "Please migrate to SDL2 or SDL3!")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+	set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+	execute_process(COMMAND ${CMAKE_CXX_COMPILER} --cflags
+	    OUTPUT_VARIABLE EM_CFLAGS
+	    COMMAND_ERROR_IS_FATAL ANY
+	)
+	string(STRIP "${EM_CFLAGS}" EM_CFLAGS)
+	find_package(Python3 REQUIRED)
+	message("Python: ${Python3_EXECUTABLE}")
+	set(ENV{EXTRA_FLAGS} "${EM_CFLAGS}")
+	execute_process(
+	    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fix_compile_commands.py
+	    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")

@@ -52,6 +52,11 @@
 #include "compiler.h"
 
 #include "multiplayer/game_multiplayer.h"
+#include "graphics.h"
+#ifdef PLAYER_YNO
+#  include "multiplayer/chat_overlay.h"
+#  include "multiplayer/status_overlay.h"
+#endif
 
 // Static variables.
 namespace {
@@ -185,6 +190,7 @@ namespace {
 	FontRef default_mincho;
 	FontRef name_text;
 	FontRef name_text_2;
+	FontRef chat_text;
 
 	struct ExFont final : public Font {
 		public:
@@ -372,6 +378,8 @@ Rect FTFont::vGetSize(char32_t glyph) const {
 	}
 
 	FT_GlyphSlot slot = face->glyph;
+
+	//double zoom = current_style.size / (double)original_style.size;
 
 	Point advance;
 	advance.x = Utils::RoundTo<int>(slot->advance.x / 64.0);
@@ -655,6 +663,23 @@ void Font::SetNameText(FontRef new_name_text, bool slim) {
 	}
 }
 
+FontRef Font::ChatText() {
+	if (chat_text)
+		return chat_text;
+	if (name_text)
+		return name_text;
+	return Default();
+}
+
+void Font::SetChatText(FontRef new_chat_text) {
+	chat_text = new_chat_text;
+	chat_text->SetFallbackFont(DefaultBitmapFont());
+#ifdef PLAYER_YNO
+	Graphics::GetChatOverlay().OnResolutionChange();
+	Graphics::GetStatusOverlay().OnResolutionChange();
+#endif
+}
+
 FontRef Font::CreateFtFont(Filesystem_Stream::InputStream is, int size, bool bold, bool italic) {
 #ifdef HAVE_FREETYPE
 	if (!is) {
@@ -748,6 +773,7 @@ Rect Font::GetSize(char32_t glyph) const {
 
 	Rect size = vGetSize(glyph);
 	size.width += current_style.letter_spacing;
+	size.width = ceilf(size.width * (current_style.size / (double)original_style.size));
 	size.height = current_style.size;
 
 	return size;
@@ -756,7 +782,8 @@ Rect Font::GetSize(char32_t glyph) const {
 Rect Font::GetSize(const ShapeRet& shape_ret) const {
 	int width = shape_ret.advance.x + current_style.letter_spacing;
 	int height = current_style.size;
-	return {0, 0, width, height};
+	//return {0, 0, width, height};
+	return {0, 0, (int)ceilf(width * (current_style.size / (double)original_style.size)), height};
 }
 
 Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, int color, char32_t glyph) const {
@@ -771,6 +798,7 @@ Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, in
 	}
 
 	gret.advance.x += current_style.letter_spacing;
+	gret.advance.x = ceilf(gret.advance.x * GetScaleRatio());
 
 	return gret.advance;
 }
@@ -786,7 +814,10 @@ Point Font::Render(Bitmap& dest, int const x, int const y, const Bitmap& sys, in
 		return {};
 	}
 
-	Point advance = { shape.advance.x + current_style.letter_spacing, shape.advance.y };
+	double zoom = current_style.size / (double)original_style.size;
+
+	Point advance = { (int)ceilf((shape.advance.x + current_style.letter_spacing) * zoom), shape.advance.y };
+	//Point advance = { shape.advance.x + current_style.letter_spacing, shape.advance.y };
 	return advance;
 }
 
@@ -803,6 +834,11 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 	// Drawing position of the glyph
 	rect.x += gret.offset.x;
 	rect.y -= gret.offset.y;
+	double zoom = original_style.size / (double)current_style.size;
+	if (zoom != 1) {
+		rect.width = ceilf(rect.width / zoom);
+		rect.height = ceilf(rect.height / zoom);
+	}
 
 	unsigned src_x = 0;
 	unsigned src_y = 0;
@@ -842,14 +878,15 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 
 		if (!gret.has_color) {
 			if (current_style.draw_gradient) {
-				dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *sys_large, src_x, src_y);
+				dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *sys_large, src_x, src_y, zoom, zoom);
 			} else {
 				auto col = sys.GetColorAt(current_style.color_offset.x + src_x, current_style.color_offset.y + src_y);
 				auto col_bm = Bitmap::Create(gret.bitmap->width(), gret.bitmap->height(), col);
-				dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0);
+				dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0, zoom, zoom);
 			}
 		} else {
 			// Color glyphs, emojis etc.
+			// TODO: Handle emojis zoom for chat
 			dest.Blit(rect.x, rect.y, *gret.bitmap, gret.bitmap->GetRect(), Opacity::Opaque());
 		}
 
@@ -860,8 +897,10 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 	if (color != ColorShadow) {
 		// First draw the shadow, offset by one
 		if (!gret.has_color && current_style.draw_shadow) {
-			auto shadow_rect = Rect(rect.x + 1, rect.y + 1, rect.width, rect.height);
-			dest.MaskedBlit(shadow_rect, *gret.bitmap, 0, 0, sys, 16, 32);
+			int ozoom = floorf(1 / zoom);
+			auto shadow_rect = Rect(rect.x + ozoom, rect.y + ozoom, rect.width, rect.height);
+			//auto shadow_rect = Rect(rect.x, rect.y, rect.width, rect.height);
+			dest.MaskedBlit(shadow_rect, *gret.bitmap, 0, 0, sys, 16, 32, zoom, zoom);
 		}
 
 		src_x = color % 10 * 16 + 2;
@@ -881,11 +920,13 @@ bool Font::RenderImpl(Bitmap& dest, int const x, int const y, const Bitmap& sys,
 				src_y -= glyph_height - 12;
 			}
 
-			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, sys, src_x, src_y);
+			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, sys, src_x, src_y, zoom, zoom);
+			//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, sys, src_x, src_y);
 		} else {
 			auto col = sys.GetColorAt(current_style.color_offset.x + src_x, current_style.color_offset.y + src_y);
 			auto col_bm = Bitmap::Create(gret.bitmap->width(), gret.bitmap->height(), col);
-			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0);
+			dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0, zoom, zoom);
+			//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, *col_bm, 0, 0);
 		}
 	} else {
 		// Color glyphs, emojis etc.
@@ -905,10 +946,16 @@ Point Font::Render(Bitmap& dest, int x, int y, Color const& color, char32_t glyp
 		return {};
 	}
 
-	auto rect = Rect(x, y, gret.bitmap->width(), gret.bitmap->height());
-	dest.MaskedBlit(rect, *gret.bitmap, 0, 0, color);
+	double zoom = original_style.size / (double)current_style.size;
+	auto rect = Rect(x, y,
+		ceilf(gret.bitmap->width() / zoom),
+		ceilf(gret.bitmap->height() / zoom));
+	//dest.MaskedBlit(rect, *gret.bitmap, 0, 0, color, zoom, zoom);
+	//auto rect = Rect(x, y, gret.bitmap->width(), gret.bitmap->height());
+	dest.MaskedBlit(rect, *gret.bitmap, 0, 0, color, zoom, zoom);
 
 	gret.advance.x += current_style.letter_spacing;
+	gret.advance.x = (int)ceilf((double)gret.advance.x / zoom);
 
 	return gret.advance;
 }

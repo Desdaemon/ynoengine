@@ -55,6 +55,9 @@ namespace Cache {
 	BitmapRef System(std::string_view filename);
 	BitmapRef System2(std::string_view filename);
 
+	BitmapRef Emoji(std::string_view filename);
+	BitmapRef Badge(std::string_view filename);
+
 	BitmapRef Tile(std::string_view filename, int tile_id);
 	BitmapRef SpriteEffect(const BitmapRef& src_bitmap, const Rect& rect, bool flip_x, bool flip_y, const Tone& tone, const Color& blend);
 

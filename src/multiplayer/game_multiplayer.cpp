@@ -40,6 +40,24 @@
 #include "yno_connection.h"
 #include "messages.h"
 
+#ifdef PLAYER_YNO
+#  include <functional>
+#  include <cpr/cpr.h>
+#  include <nlohmann/json.hpp>
+#  include <uv.h>
+#  include "scene_settings.h"
+#  include "chat_overlay.h"
+#  include "graphics.h"
+#  include "platform.h"
+#  include <lcf/lsd/reader.h>
+#  include "status_overlay.h"
+#  if defined(_WIN32) && !defined(timegm)
+#    define timegm _mkgmtime
+#  endif
+using namespace std::literals::chrono_literals;
+using json = nlohmann::json;
+#endif
+
 static Game_Multiplayer _instance;
 
 Game_Multiplayer& Game_Multiplayer::Instance() {
@@ -48,6 +66,9 @@ Game_Multiplayer& Game_Multiplayer::Instance() {
 
 Game_Multiplayer::Game_Multiplayer() {
 	InitConnection();
+	for (auto& timer : timers) {
+		timer = Game_Clock::GetFrameTime();
+	}
 }
 
 void Game_Multiplayer::SpawnOtherPlayer(int id) {
@@ -64,7 +85,7 @@ void Game_Multiplayer::SpawnOtherPlayer(int id) {
 
 	auto scene_map = Scene::Find(Scene::SceneType::Map);
 	if (!scene_map) {
-		Output::Error("unexpected, {}:{}", __FILE__, __LINE__);
+		Output::Debug("unexpected, {}:{}", __FILE__, __LINE__);
 		return;
 	}
 	auto old_list = &DrawableMgr::GetLocalList();
@@ -127,12 +148,17 @@ static std::string get_room_url(int room_id, std::string_view session_token) {
 }
 
 void Game_Multiplayer::InitConnection() {
-	/*
-	conn.RegisterSystemHandler(YNOConnection::SystemMessage::OPEN, [] (Multiplayer::Connection& c) {
-	});*/
 	using YSM = YNOConnection::SystemMessage;
 	using MCo = Multiplayer::Connection;
+	connection.RegisterSystemHandler(YSM::OPEN, [this] (MCo& c) {
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
+	});
 	connection.RegisterSystemHandler(YSM::CLOSE, [this] (MCo& c) {
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
 		if (session_active) {
 			Output::Info("Reconnecting: ID={}", room_id);
 			Connect(room_id);
@@ -143,6 +169,9 @@ void Game_Multiplayer::InitConnection() {
 	connection.RegisterSystemHandler(YSM::EXIT, [this] (MCo& c) {
 		// an exit happens outside ynoclient
 		// resume with SessionReady()
+#ifdef PLAYER_YNO
+		Graphics::GetStatusOverlay().MarkDirty();
+#endif
 		Output::Debug("MP: socket exited with code 1028");
 		session_active = false;
 		Quit();
@@ -159,6 +188,12 @@ void Game_Multiplayer::InitConnection() {
 		session_connected = true;
 		SendBasicData();
 		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals);
+#ifdef PLAYER_YNO
+		auto& player = playerdata[p.uuid];
+		player.rank = p.rank;
+		player.badge = p.badge;
+		player.account = p.account_bin == 1;
+#endif
 	});
 	connection.RegisterHandler<RoomInfoPacket>("ri", [this] (RoomInfoPacket& p) {
 		if (p.room_id != room_id) {
@@ -235,10 +270,19 @@ void Game_Multiplayer::InitConnection() {
 			return;
 		if (players.find(p.id) == players.end()) SpawnOtherPlayer(p.id);
 		players[p.id].account = p.account_bin == 1;
+		players[p.id].uuid = p.uuid;
 
 		UpdateNBPlayers();
 
 		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals, p.id);
+#ifdef PLAYER_YNO
+		auto& player = playerdata[p.uuid];
+		if (players[p.id].chat_name)
+			player.name = players[p.id].chat_name->nickname;
+		player.rank = p.rank;
+		player.badge = p.badge;
+		player.account = p.account_bin == 1;
+#endif
 	});
 	connection.RegisterHandler<DisconnectPacket>("d", [this] (DisconnectPacket& p) {
 		auto it = players.find(p.id);
@@ -370,7 +414,7 @@ void Game_Multiplayer::InitConnection() {
 				ry = py - oy;
 			}
 
-			int dist = std::sqrt(rx * rx + ry * ry);	
+			int dist = std::sqrt(rx * rx + ry * ry);
 			if (hrs_set.find(p.snd.name) != hrs_set.end()) {
 				dist = std::max(0, dist - 7);
 			}
@@ -442,8 +486,8 @@ void Game_Multiplayer::InitConnection() {
 		auto& player = players[p.id];
 		auto scene_map = Scene::Find(Scene::SceneType::Map);
 		if (!scene_map) {
-			Output::Error("unexpected, {}:{}", __FILE__, __LINE__);
-			//return;
+			Output::Debug("unexpected, {}:{}", __FILE__, __LINE__);
+			return;
 		}
 		auto old_list = &DrawableMgr::GetLocalList();
 		DrawableMgr::SetLocalList(&scene_map->GetDrawableList());
@@ -451,32 +495,142 @@ void Game_Multiplayer::InitConnection() {
 		DrawableMgr::SetLocalList(old_list);
 
 		Web_API::OnPlayerNameUpdated(p.name, p.id);
+#ifdef PLAYER_YNO
+		if (auto pdata = playerdata.find(player.uuid); pdata != playerdata.end()) {
+			pdata->second.name = p.name;
+		}
+#endif
 	});
 	connection.RegisterHandler<CUTimePacket>("cut", [this] (CUTimePacket& p) {
 		if (!Player::IsCollectiveUnconscious()) return;
 		const int raw_time = p.time;
 		if (raw_time > 0 && (raw_time < CUTimeFormat::HOURS * CUTimeFormat::DAYS)) {
 			cu_time_hours = raw_time % CUTimeFormat::HOURS;
-			cu_time_days = raw_time / CUTimeFormat::DAYS;
+			cu_time_days = raw_time / CUTimeFormat::HOURS;
 			cu_randint = p.randint;
 		} else {
       cu_time_hours = 0;
       cu_time_days = 0;
 			cu_randint = 0;
 	  }
-	  
+
 	  UpdateCUTime();
 	});
-	connection.RegisterHandler<CUWeatherPacket>("cuw", [this] (CUWeatherPacket& p) {                                      	
+	connection.RegisterHandler<CUWeatherPacket>("cuw", [this] (CUWeatherPacket& p) {
 		if (!Player::IsCollectiveUnconscious()) return;
 		if (!(p.temperature >= -100 && p.temperature <= 100) || !(p.precipitation >= 0 && p.precipitation <= 100)) return;
 
 		cu_temperature = p.temperature;
 		cu_precipitation = p.precipitation;
+		UpdateCUWeather();
 	});
+#ifndef EMSCRIPTEN
+	sessionConn.RegisterSystemHandler(YSM::OPEN, [this](MCo&) {
+		if (connection.IsConnected())
+			connection.Close();
+		session_active = true;
+		if (room_id != -1)
+			Connect(room_id);
+
+		// sync chat messages
+		cpr::Response resp = cpr::Get(
+			cpr::Url{ ApiEndpoint("chathistory") },
+			cpr::Parameters{ {"globalMsgLimit", "200"}, {"partyMsgLimit", "100"}, {"lastMsgId", lastmsgid} }
+		);
+		if (resp.status_code >= 200 && resp.status_code < 300) {
+			json chatmsgs = json::parse(resp.text);
+			for (auto& it : chatmsgs["players"]) {
+				auto& entry = playerdata[(std::string)it["uuid"]];
+				entry.name = it["name"];
+				entry.systemName = it["systemName"];
+				entry.rank = it["rank"];
+				entry.account = it["account"];
+				entry.badge = it["badge"];
+			}
+
+			const auto& messages = chatmsgs["messages"];
+			auto& chatoverlay = Graphics::GetChatOverlay();
+			for (auto it = messages.begin(); it != messages.end(); ++it) {
+				std::string name = "Unknown Player";
+				std::string system;
+				std::string badge;
+				bool account = false;
+				int rank = 0;
+				std::string uuid((*it)["uuid"]);
+				if (auto player = playerdata.find(uuid); player != playerdata.end()) {
+					name = player->second.name;
+					system = player->second.systemName;
+					badge = player->second.badge;
+					account = player->second.account;
+					rank = player->second.rank;
+				}
+				std::string contents((*it)["contents"]);
+				chatoverlay.AddMessage(contents, name, uuid, system, badge, account, true, rank);
+				lastmsgid = (std::string)(*it)["msgId"];
+			}
+			if (!username.empty()) {
+				if (session_token.empty())
+					Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as <{}>.", username));
+				else
+					Graphics::GetChatOverlay().AddSystemMessage(fmt::format("Connected to YNOproject as [{}].", username));
+			}
+			else {
+				Graphics::GetChatOverlay().AddSystemMessage(
+					"Welcome to YNOproject! To join the chat, first set your name in the Online settings.");
+			}
+		}
+	});
+	sessionConn.RegisterSystemHandler(YSM::CLOSE, [this](MCo&) {
+		session_active = false;
+	});
+	sessionConn.RegisterHandler<SessionGSay>("gsay", [this](SessionGSay& p) {
+		std::string name = "Unknown Player";
+		std::string system;
+		std::string badge;
+		bool account = false;
+		int rank = 0;
+		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
+			if (!player->second.name.empty())
+				name = player->second.name;
+			system = player->second.systemName;
+			badge = player->second.badge;
+			account = player->second.account;
+			rank = player->second.rank;
+		}
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, true, rank);
+		lastmsgid = p.msgid;
+	});
+	sessionConn.RegisterHandler<SessionSay>("say", [this](SessionSay& p) {
+		std::string name = "Unknown Player";
+		std::string system;
+		std::string badge;
+		bool account = false;
+		int rank = 0;
+		if (auto player = playerdata.find(p.uuid); player != playerdata.end()) {
+			if (!player->second.name.empty())
+				name = player->second.name;
+			system = player->second.systemName;
+			badge = player->second.badge;
+			account = player->second.account;
+			rank = player->second.rank;
+		}
+		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, false, rank);
+	});
+	sessionConn.RegisterHandler<SessionPlayerInfo>("p", [this](SessionPlayerInfo& p) {
+		auto& player = playerdata[p.uuid];
+		player.name = p.name;
+		player.systemName = p.systemName;
+		player.rank = p.rank;
+		player.account = p.account;
+		player.badge = p.badge;
+	});
+	sessionConn.RegisterHandler<SessionPlayerCount>("pc", [this](SessionPlayerCount& p) {
+		Graphics::GetStatusOverlay().SetPlayerCount(p.player_count);
+	});
+#endif
 }
 
-using namespace Messages::C2S;
+namespace C2S = Messages::C2S;
 
 void Game_Multiplayer::Connect(int map_id, bool room_switch) {
 	Output::Debug("MP: connecting to id={}", map_id);
@@ -516,6 +670,17 @@ void Game_Multiplayer::Initialize() {
 	}
 }
 
+void Game_Multiplayer::InitSession() {
+#ifdef PLAYER_YNO
+	if (!session_token.empty() || !cfg.session_token.Get().empty()) {
+		CheckLogin(false);
+	}
+
+	sessionConn.need_header = false;
+	sessionConn.Open(GetSessionEndpoint());
+#endif
+}
+
 void Game_Multiplayer::Quit() {
 	Web_API::UpdateConnectionStatus(0); // disconnected
 	connection.Close();
@@ -540,25 +705,25 @@ void Game_Multiplayer::SendBasicData() {
 
 void Game_Multiplayer::MainPlayerMoved(int dir) {
 	auto& p = Main_Data::game_player;
-	connection.SendPacketAsync<MainPlayerPosPacket>(p->GetX(), p->GetY());
+	connection.SendPacketAsync<C2S::MainPlayerPosPacket>(p->GetX(), p->GetY());
 }
 
 void Game_Multiplayer::MainPlayerFacingChanged(int dir) {
-	connection.SendPacketAsync<FacingPacket>(dir);
+	connection.SendPacketAsync<C2S::FacingPacket>(dir);
 }
 
 void Game_Multiplayer::MainPlayerChangedMoveSpeed(int spd) {
-	connection.SendPacketAsync<SpeedPacket>(spd);
+	connection.SendPacketAsync<C2S::SpeedPacket>(spd);
 }
 
 void Game_Multiplayer::MainPlayerChangedSpriteGraphic(std::string name, int index) {
-	connection.SendPacketAsync<SpritePacket>(name, index);
+	connection.SendPacketAsync<C2S::SpritePacket>(name, index);
 	Web_API::OnPlayerSpriteUpdated(name, index);
 }
 
 void Game_Multiplayer::MainPlayerJumped(int x, int y) {
 	auto& p = Main_Data::game_player;
-	connection.SendPacketAsync<JumpPacket>(x, y);
+	connection.SendPacketAsync<C2S::JumpPacket>(x, y);
 }
 
 void Game_Multiplayer::MainPlayerFlashed(int r, int g, int b, int p, int f) {
@@ -566,26 +731,26 @@ void Game_Multiplayer::MainPlayerFlashed(int r, int g, int b, int p, int f) {
 	if (last_flash_frame_index == frame_index - 1 && (last_frame_flash.get() == nullptr || *last_frame_flash == flash_array)) {
 		if (last_frame_flash.get() == nullptr) {
 			last_frame_flash = std::make_unique<std::array<int, 5>>(flash_array);
-			connection.SendPacketAsync<RepeatingFlashPacket>(r, g, b, p, f);
+			connection.SendPacketAsync<C2S::RepeatingFlashPacket>(r, g, b, p, f);
 		}
 	} else {
-		connection.SendPacketAsync<FlashPacket>(r, g, b, p, f);
+		connection.SendPacketAsync<C2S::FlashPacket>(r, g, b, p, f);
 		last_frame_flash.reset();
 	}
 	last_flash_frame_index = frame_index;
 }
 
 void Game_Multiplayer::MainPlayerChangedTransparency(int transparency) {
-	connection.SendPacketAsync<TransparencyPacket>(transparency);
+	connection.SendPacketAsync<C2S::TransparencyPacket>(transparency);
 }
 
 void Game_Multiplayer::MainPlayerChangedSpriteHidden(bool hidden) {
 	int hidden_bin = hidden ? 1 : 0;
-	connection.SendPacketAsync<HiddenPacket>(hidden_bin);
+	connection.SendPacketAsync<C2S::HiddenPacket>(hidden_bin);
 }
 
 void Game_Multiplayer::MainPlayerTeleported(int map_id, int x, int y) {
-	connection.SendPacketAsync<TeleportPacket>(x, y);
+	connection.SendPacketAsync<C2S::TeleportPacket>(x, y);
 	Web_API::OnPlayerTeleported(map_id, x, y);
 }
 
@@ -605,13 +770,18 @@ void Game_Multiplayer::MainPlayerTriggeredEvent(int event_id, bool action) {
 }
 
 void Game_Multiplayer::SystemGraphicChanged(std::string_view sys) {
-	connection.SendPacketAsync<SysNamePacket>(ToString(sys));
+	connection.SendPacketAsync<C2S::SysNamePacket>(ToString(sys));
 	Web_API::OnUpdateSystemGraphic(ToString(sys));
+#ifndef EMSCRIPTEN
+	if (on_system_graphic_change) {
+		on_system_graphic_change(ToString(sys));
+	}
+#endif
 }
 
 void Game_Multiplayer::SePlayed(const lcf::rpg::Sound& sound) {
 	if (!Main_Data::game_player->IsMenuCalling()) {
-		connection.SendPacketAsync<SEPacket>(sound);
+		connection.SendPacketAsync<C2S::SEPacket>(sound);
 	}
 }
 
@@ -653,7 +823,7 @@ bool Game_Multiplayer::IsPictureSynced(int pic_id, std::string_view pic_name) {
 void Game_Multiplayer::PictureShown(int pic_id, Game_Pictures::ShowParams& params) {
 	if (IsPictureSynced(pic_id, params.name)) {
 		auto& p = Main_Data::game_player;
-		connection.SendPacketAsync<ShowPicturePacket>(pic_id, params,
+		connection.SendPacketAsync<C2S::ShowPicturePacket>(pic_id, params,
 			Game_Map::GetPositionX(), Game_Map::GetPositionY(),
 			p->GetPanX(), p->GetPanY());
 	}
@@ -662,7 +832,7 @@ void Game_Multiplayer::PictureShown(int pic_id, Game_Pictures::ShowParams& param
 void Game_Multiplayer::PictureMoved(int pic_id, Game_Pictures::MoveParams& params) {
 	if (sync_picture_cache.count(pic_id) && sync_picture_cache[pic_id]) {
 		auto& p = Main_Data::game_player;
-		connection.SendPacketAsync<MovePicturePacket>(pic_id, params,
+		connection.SendPacketAsync<C2S::MovePicturePacket>(pic_id, params,
 			Game_Map::GetPositionX(), Game_Map::GetPositionY(),
 			p->GetPanX(), p->GetPanY());
 	}
@@ -671,7 +841,7 @@ void Game_Multiplayer::PictureMoved(int pic_id, Game_Pictures::MoveParams& param
 void Game_Multiplayer::PictureErased(int pic_id) {
 	if (sync_picture_cache.count(pic_id) && sync_picture_cache[pic_id]) {
 		sync_picture_cache.erase(pic_id);
-		connection.SendPacketAsync<ErasePicturePacket>(pic_id);
+		connection.SendPacketAsync<C2S::ErasePicturePacket>(pic_id);
 	}
 }
 
@@ -690,7 +860,7 @@ bool Game_Multiplayer::IsBattleAnimSynced(int anim_id) {
 
 void Game_Multiplayer::PlayerBattleAnimShown(int anim_id) {
 	if (IsBattleAnimSynced(anim_id)) {
-		connection.SendPacketAsync<ShowPlayerBattleAnimPacket>(anim_id);
+		connection.SendPacketAsync<C2S::ShowPlayerBattleAnimPacket>(anim_id);
 	}
 }
 
@@ -711,7 +881,8 @@ void Game_Multiplayer::ApplyPlayerBattleAnimUpdates() {
 void Game_Multiplayer::ApplyFlash(int r, int g, int b, int power, int frames) {
 	for (auto& p : players) {
 		p.second.ch->Flash(r, g, b, power, frames);
-		p.second.chat_name->SetFlashFramesLeft(frames);
+		if (p.second.chat_name)
+			p.second.chat_name->SetFlashFramesLeft(frames);
 	}
 }
 
@@ -728,7 +899,8 @@ void Game_Multiplayer::ApplyRepeatingFlashes() {
 void Game_Multiplayer::ApplyTone(Tone tone) {
 	for (auto& p : players) {
 		p.second.sprite->SetTone(tone);
-		p.second.chat_name->SetEffectsDirty();
+		if (p.second.chat_name)
+			p.second.chat_name->SetEffectsDirty();
 	}
 }
 
@@ -767,6 +939,7 @@ void Game_Multiplayer::UpdateCUWeather() {
 }
 
 void Game_Multiplayer::UpdateGlobalVariables() {
+	if (!Main_Data::game_variables) return;
 	UpdateNBPlayers();
   UpdateCUTime();
   UpdateCUWeather();
@@ -775,7 +948,7 @@ void Game_Multiplayer::UpdateGlobalVariables() {
 void Game_Multiplayer::Update() {
 	if (session_active) {
 		if (last_flash_frame_index > -1 && frame_index > last_flash_frame_index) {
-			connection.SendPacketAsync<RemoveRepeatingFlashPacket>();
+			connection.SendPacketAsync<C2S::RemoveRepeatingFlashPacket>();
 			last_flash_frame_index = -1;
 			last_frame_flash.reset();
 		}
@@ -857,7 +1030,8 @@ void Game_Multiplayer::Update() {
 						}
 					}
 				}
-				p.second.chat_name->SetTransparent(overlap);
+				if (p.second.chat_name)
+					p.second.chat_name->SetTransparent(overlap);
 			}
 		}
 
@@ -877,7 +1051,7 @@ void Game_Multiplayer::Update() {
 
 		auto old_list = &DrawableMgr::GetLocalList();
 		DrawableMgr::SetLocalList(&scene_map->GetDrawableList());
-		
+
 		for (auto dcpi = dc_players.rbegin(); dcpi != dc_players.rend(); ++dcpi) {
 			auto& ch = dcpi->ch;
 			if (ch->GetBaseOpacity() > 0) {
@@ -893,6 +1067,182 @@ void Game_Multiplayer::Update() {
 		DrawableMgr::SetLocalList(old_list);
 	}
 
-	if (session_connected)
+	if (session_connected) {
 		connection.FlushQueue();
+#ifndef EMSCRIPTEN
+		sessionConn.FlushQueue();
+#endif
+	}
+
+	UpdateTimers();
+}
+
+void Game_Multiplayer::SetConfig(const Game_ConfigOnline& cfg) {
+	this->cfg = cfg;
+	session_token = cfg.session_token.Get();
+	SyncSaveFile();
+	SetNametagMode((int)cfg.nametag_mode.Get());
+	if (!cfg.username.Get().empty())
+		SetNickname(cfg.username.Get());
+}
+
+std::string Game_Multiplayer::GetSessionEndpoint() const {
+	return fmt::format("{}session?token={}", Web_API::GetSocketURL(), session_token);
+}
+
+void Game_Multiplayer::CheckLogin(bool async) {
+	std::string token = session_token;
+	if (token.empty())
+		token = cfg.session_token.Get();
+	if (token.empty()) return;
+	session_token = token;
+
+	if (async) {
+		uv_queue_work(uv_default_loop(), new uv_work_t{},
+		[](uv_work_t*) { GMI().CheckLogin(false); },
+		[](uv_work_t* task, int) { delete task; });
+		return;
+	}
+
+	cpr::Header header;
+	header["Authorization"] = token;
+	auto resp = cpr::Get(cpr::Url{ ApiEndpoint("info")}, header);
+	CheckLoginCallback(resp);
+}
+
+void Game_Multiplayer::CheckLoginCallback(cpr::Response resp) {
+	if (!(resp.status_code >= 200 && resp.status_code < 300))
+		return;
+	json body = json::parse(resp.text);
+	std::string uuid(body["uuid"]);
+	if (uuid.empty())
+		Logout();
+	else {
+		username = (std::string)body["name"];
+		cfg.username.Set(username);
+	}
+	Graphics::GetChatOverlay().MarkDirty();
+}
+
+void Game_Multiplayer::Login(std::string_view username, std::string_view password) {
+	std::string formdata = fmt::format("user={}&password={}", username, password);
+	cpr::Header header;
+	header["Content-Type"] = "application/x-www-form-urlencoded";
+
+	auto resp = cpr::Post(
+		cpr::Url{ ApiEndpoint("login") },
+		cpr::Body{ formdata }, header);
+	if (resp.status_code >= 200 && resp.status_code < 300) {
+		login_failure.clear();
+		session_token = resp.text;
+		this->username = username;
+		cfg.session_token.Set(session_token);
+		CheckLogin(false);
+		ReconnectSession();
+	}
+	else {
+		Output::Warning("login failed: {} {}", resp.status_code, resp.text);
+		login_failure = resp.text;
+	}
+}
+
+void Game_Multiplayer::Logout() {
+	session_token.clear();
+	username.clear();
+	cfg.session_token.Set("");
+	cfg.username.Set("");
+	ReconnectSession();
+}
+
+void Game_Multiplayer::ReconnectSession() {
+	Scene_Settings::SaveConfig(true);
+	sessionConn.Open(GetSessionEndpoint());
+}
+
+void Game_Multiplayer::UpdateTimers() {
+	auto now = Game_Clock::GetFrameTime();
+
+	if (!sessionConn.IsConnected() && session_active) {
+		if (now - timers[Timers::conn_check] > 5s) {
+			Graphics::GetChatOverlay().AddSystemMessage("Session disconnected, attempting to reconnect...");
+			timers[Timers::conn_check] = now;
+			sessionConn.Open(GetSessionEndpoint());
+		}
+	}
+
+	if (now - timers[Timers::token_check] > 600s) {
+		timers[Timers::token_check] = now;
+		CheckLogin();
+	}
+}
+
+void Game_Multiplayer::SetNickname(std::string_view name) {
+	std::string value(name);
+	GMI().sessionConn.SendPacketAsync<Messages::C2S::SessionPlayerName>(value);
+	username = value;
+	cfg.username.Set(value);
+	Graphics::GetChatOverlay().MarkDirty();
+	CheckLogin();
+}
+
+std::string Game_Multiplayer::ApiEndpoint(std::string_view path) const {
+	std::string_view game = Player::emscripten_game_name;
+	if (game.empty())
+		game = "2kki";
+	return fmt::format("https://connect.ynoproject.net/{}/api/{}", game, path);
+}
+
+void Game_Multiplayer::SyncSaveFile() const {
+	if (session_token.empty() || !FileFinder::Game()) return;
+
+	cpr::Header header;
+	header["Authorization"] = session_token;
+	auto timestampResp = cpr::Get(cpr::Url{ ApiEndpoint("savesync?command=timestamp") }, header);
+	if (!(timestampResp.status_code >= 200 && timestampResp.status_code < 300))
+		return Output::Warning("failed to get server save timestamp: {}", timestampResp.status_code);
+
+	std::istringstream ss(timestampResp.text);
+	std::tm timestamp;
+	ss >> std::get_time(&timestamp, "%Y-%m-%dT%H:%M:%SZ"); // RFC3339
+	if (ss.fail())
+		return Output::Warning("could not parse save timestamp: `{}`", timestampResp.text);
+	time_t last_synced = timegm(&timestamp);
+
+	const char* path = "Save01.lsd";
+	auto savefile = FileFinder::Save().FindFile(path);
+	if (!savefile.empty() && Platform::File(savefile).GetLastModified() >= last_synced)
+		return Output::Info("Save slot 1 is up to date.");
+	if (savefile.empty())
+		savefile = FileFinder::MakeCanonical(FileFinder::MakePath(FileFinder::Save().GetFullPath(), path));
+
+	std::ofstream output(savefile, std::ios::binary);
+	auto resp = cpr::Download(output, cpr::Url{ ApiEndpoint("savesync?command=get") }, header);
+	if (resp.status_code >= 200 && resp.status_code < 300) {
+		output.flush();
+		FileFinder::Save().ClearCache();
+		Output::Info("Save slot 1 has been updated.");
+	}
+	else
+		Output::Warning("failed to update save slot 1: {}", resp.status_code);
+}
+
+void Game_Multiplayer::UploadSaveFile() const {
+	if (session_token.empty() || !FileFinder::Game()) return;
+
+	const char* path = "Save01.lsd";
+	auto savefile = FileFinder::Save().FindFile(path);
+	if (savefile.empty())
+		return Output::Warning("bug: no save file to upload!");
+
+	cpr::Header header;
+	header["Authorization"] = session_token;
+
+	auto resp = cpr::Post(
+		cpr::Url{ ApiEndpoint("savesync?command=push") }, header,
+		cpr::Body{ cpr::File{savefile} }
+	);
+	if (resp.status_code >= 200 && resp.status_code < 300)
+		Output::Info("Uploaded save slot 1. ({} bytes up)", resp.uploaded_bytes);
+	else
+		Output::Warning("failed to upload save slot 1: {}", resp.status_code);
 }

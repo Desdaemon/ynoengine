@@ -24,6 +24,8 @@
 #include "player.h"
 #include "system.h"
 #include "baseui.h"
+#include "bitmap.h"
+#include "cache.h"
 
 #include <algorithm>
 #include <array>
@@ -49,6 +51,8 @@ namespace Input {
 	std::array<int, BUTTON_COUNT> press_time;
 	std::bitset<BUTTON_COUNT> triggered, repeated, released;
 	Input::KeyStatus raw_triggered, raw_pressed, raw_released;
+	Composition composition{};
+	std::string text_input = "";
 	int dir4;
 	int dir8;
 	std::unique_ptr<Source> source;
@@ -431,4 +435,46 @@ void Input::SimulateButtonPress(Input::InputButton button) {
 			break;
 	}
 	UpdateButton(button, true);
+}
+
+int Input::RenderTextComposition(Bitmap& contents, int offset, int y, Font* font_) {
+	auto& font = font_ ? *font_ : *Font::Default();
+	std::string_view text(Input::composition.text.data());
+	std::u32string text32;
+	auto iter = text.data();
+	auto end = iter + text.size();
+
+	while (iter != &*text.end()) {
+		auto ret = Utils::TextNext(iter, end, 0);
+		iter = ret.next;
+		if (!ret) continue;
+
+		// TODO: handle exfont, control characters
+		if (Utils::IsControlCharacter(ret.ch) || ret.is_exfont)
+			continue;
+		text32.push_back(ret.ch);
+	}
+
+	if (!text32.empty()) {
+		auto shape = font.Shape(text32);
+		double zoom = font.GetScaleRatio();
+		auto& system = *Cache::SystemOrBlack();
+		for (int i = 0; i < shape.size(); ++i) {
+			auto& ch = shape[i];
+			if (i >= Input::composition.sel_start - 1 && i <= Input::composition.sel_start - 1 + Input::composition.sel_length) {
+				// white on offblue
+				contents.FillRect({ offset, y, (int)ceilf(ch.advance.x * zoom), (int)ceilf(ch.advance.y * zoom) }, Color(100, 100, 255, 255));
+				offset += font.Render(contents, offset, y, Color(255, 255, 255, 255), ch.code).x;
+			}
+			else {
+				// black on white
+				contents.FillRect({ offset, y, (int)ceilf(ch.advance.x * zoom), (int)ceilf(ch.advance.y * zoom) }, Color(255, 255, 255, 255));
+				offset += font.Render(contents, offset, y, Color(0, 0, 0, 255), ch.code).x;
+			}
+		}
+	}
+
+	composition.active = false;
+	composition.text.clear();
+	return offset;
 }
