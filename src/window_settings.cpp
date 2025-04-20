@@ -766,6 +766,7 @@ void Window_Settings::RefreshOnline() {
 	if (!cfg.username.Get().empty() && !cfg.session_token.Get().empty()) {
 		AddOption(LockedMenuItem("Status", "", fmt::format("Logged in as {}", cfg.username.Get())), [] {});
 		AddOption(MenuItem("Logout", "", ""), [this] {
+			Scene::PopUntil(Scene::SceneType::Map);
 			GMI().Logout();
 			Refresh();
 		});
@@ -794,6 +795,7 @@ void Window_Settings::RefreshOnline() {
 				AddOption(LockedMenuItem("Could not login", "", failure), [] {});
 		}
 		AddOption(MenuItem("Login", "", ""), [this, &cfg] {
+			Scene::PopUntil(Scene::SceneType::Map);
 			GMI().Login(cfg.username.Get(), cfg.password.Get());
 			cfg.password.Set("");
 			Refresh();

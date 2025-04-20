@@ -676,6 +676,14 @@ namespace C2S {
 	protected:
 		std::string contents;
 	};
+	class SessionSay : public C2SPacket {
+	public:
+		SessionSay(std::string contents) : C2SPacket("say"),
+			contents(std::move(contents)) {}
+		std::string ToBytes() const override { return Build(contents); }
+	protected:
+		std::string contents;
+	};
 #endif
 }
 }
