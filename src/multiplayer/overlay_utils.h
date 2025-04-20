@@ -22,7 +22,7 @@
 
 namespace OverlayUtils {
 	inline bool LargeScreen() {
-		return DisplayUi->GetScreenSurfaceRect().width >= 640;
+		return DisplayUi->GetScreenSurfaceRect().width >= 720;
 	}
 	inline int ChatTextHeight() {
 		return LargeScreen() ? 37 : 12;

@@ -38,6 +38,7 @@ namespace ImageGif {
         inline operator bool() const noexcept { return gifFile != nullptr; }
     private:
         explicit Decoder() noexcept = default;
+        std::vector<uint32_t> scratch;
 
         GifFileType* gifFile;
 		int currentFrame{};

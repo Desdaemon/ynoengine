@@ -700,6 +700,16 @@ void Sdl2Ui::UpdateDisplay() {
 		float width_float = static_cast<float>(win_width);
 		float height_float = static_cast<float>(win_height);
 
+		int available_width = window.width;
+		if (webview) {
+			LayoutWebview();
+			// Adjust SDL viewport to avoid overlapping with the webview
+			if (webview_layout == WebviewLayout::Sidebar && webview_visible) {
+				available_width -= webview_dims.width;
+				width_float = static_cast<float>(available_width);
+			}
+		}
+
 		float want_aspect = (float)main_surface->width() / main_surface->height();
 		float real_aspect = width_float / height_float;
 
@@ -708,7 +718,6 @@ void Sdl2Ui::UpdateDisplay() {
 				viewport.x = border_x;
 				viewport.w = win_width;
 			}
-			ModifyViewport();
 		};
 
 		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Integer) {
@@ -720,7 +729,8 @@ void Sdl2Ui::UpdateDisplay() {
 			}
 
 			viewport.w = static_cast<int>(ceilf(main_surface->width() * window.scale));
-			viewport.x = (win_width - viewport.w) / 2 + border_x;
+			// viewport.x = (win_width - viewport.w) / 2 + border_x;
+			viewport.x = (available_width - viewport.w) / 2;
 			viewport.h = static_cast<int>(ceilf(main_surface->height() * window.scale));
 			viewport.y = (win_height - viewport.h) / 2 + border_y;
 			do_stretch();
@@ -728,8 +738,10 @@ void Sdl2Ui::UpdateDisplay() {
 		} else if (want_aspect > real_aspect) {
 			// Letterboxing (black bars top and bottom)
 			window.scale = width_float / main_surface->width();
-			viewport.x = border_x;
-			viewport.w = win_width;
+			// viewport.x = border_x;
+			// viewport.w = win_width;
+			viewport.x = 0;
+			viewport.w = available_width;
 			viewport.h = static_cast<int>(ceilf(main_surface->height() * window.scale));
 			viewport.y = (win_height - viewport.h) / 2 + border_y;
 			do_stretch();
@@ -740,13 +752,10 @@ void Sdl2Ui::UpdateDisplay() {
 			viewport.y = border_y;
 			viewport.h = win_height;
 			viewport.w = static_cast<int>(ceilf(main_surface->width() * window.scale));
-			viewport.x = (win_width - viewport.w) / 2 + border_x;
+			// viewport.x = (win_width - viewport.w) / 2 + border_x;
+			viewport.x = (available_width - viewport.w) / 2;
 			do_stretch();
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
-		}
-
-		if (webview && webview_visible) {
-			LayoutWebview();
 		}
 
 		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
@@ -787,15 +796,6 @@ void Sdl2Ui::UpdateDisplay() {
 		SDL_SetRenderTarget(sdl_renderer, nullptr);
 		SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
 	}
-	//else if (screen_surface && sdl_texture_screen) {
-
-	//	SDL_SetRenderTarget(sdl_renderer, sdl_texture_scaled);
-	//	SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
-	//	SDL_RenderCopy(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
-
-	//	SDL_SetRenderTarget(sdl_renderer, nullptr);
-	//	SDL_RenderCopy(sdl_renderer, sdl_texture_scaled, nullptr, nullptr);
-	//}
 	else {
 		SDL_RenderCopy(sdl_renderer, sdl_texture_game, nullptr, nullptr);
 	}
@@ -807,6 +807,13 @@ void Sdl2Ui::UpdateDisplay() {
 	}
 
 	SDL_RenderPresent(sdl_renderer);
+
+#ifdef _WIN32
+	if (webview) {
+		HWND hwnd = (HWND&)webview->window().value();
+		ShowWindow(hwnd, webview_visible ? SW_SHOW : SW_HIDE);
+	}
+#endif
 }
 
 void Sdl2Ui::SetTitle(const std::string &title) {
@@ -1526,11 +1533,11 @@ void Sdl2Ui::Dispatch(Intent intent) {
 	switch (intent) {
 	case Intent::ToggleWebview: {
 		webview_visible = !webview_visible;
+		window.size_changed = true;
+		UpdateDisplay();
 #ifdef _WIN32
 		HWND hwnd = (HWND&)webview->window().value();
 		ShowWindow(hwnd, webview_visible ? SW_SHOW : SW_HIDE);
-		if (webview_visible)
-			LayoutWebview();
 		SDL_RaiseWindow(sdl_window);
 #endif
 	} break;
@@ -1549,28 +1556,31 @@ void Sdl2Ui::Dispatch(Intent intent) {
 	}
 }
 
-void Sdl2Ui::SetWebviewLayout(WebviewLayout layout) {
-	BaseUi::SetWebviewLayout(layout);
-	ModifyViewport();
-	if (layout == WebviewLayout::Expanded && !webview_visible)
-		webview_visible = true;
-	if (webview_visible)
-		LayoutWebview();
+namespace {
+	// constexpr int webview_min_width = 320;
+	constexpr int webview_max_width = 600;
 }
 
-void Sdl2Ui::ModifyViewport() {
+void Sdl2Ui::SetWebviewLayout(WebviewLayout layout) {
+	BaseUi::SetWebviewLayout(layout);
+	if (layout == WebviewLayout::Expanded && !webview_visible)
+		webview_visible = true;
+	LayoutWebview();
+}
+
+void Sdl2Ui::LayoutWebview() {
+	if (!webview) return;
+
 	switch (webview_layout) {
 	case WebviewLayout::Sidebar: {
-		webview_dims = { std::max(0, window.width - 800), 0, std::min(800, window.width), window.height };
+		int available_width = window.width - webview_max_width;
+		webview_dims = { available_width, 0, std::min(webview_max_width, window.width - available_width), window.height };
 	} break;
 	case WebviewLayout::Expanded: {
 		webview_dims = { 0, 0, window.width, window.height };
 	} break;
 	}
-}
 
-void Sdl2Ui::LayoutWebview() {
-	if (!webview) return;
 #ifdef _WIN32
 	HWND hwnd = (HWND&)webview->window().value();
 	RECT rect{ 0, 0, webview_dims.width, webview_dims.height };
@@ -1580,5 +1590,6 @@ void Sdl2Ui::LayoutWebview() {
 		rect.bottom - rect.top,
 		SWP_FRAMECHANGED | SWP_SHOWWINDOW);
 #else
+	// Handle other platforms if necessary
 #endif
 }

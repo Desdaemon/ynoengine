@@ -100,6 +100,10 @@ private:
 
 inline void ChatOverlayMessage::SetOnInteract(std::function<void(ChatOverlayMessage&)> on_interact) { OnInteract = on_interact; }
 
+struct ViewportInfo {
+	int scroll_px, last_sticky_px, extra;
+};
+
 class ChatOverlay : public Drawable {
 public:
 	ChatOverlay();
@@ -120,6 +124,8 @@ public:
 	void AddSystemMessage(std::string_view string);
 private:
 	bool IsAnyMessageVisible() const;
+
+	ViewportInfo LayoutViewport(int text_height, const Font& font) const;
 
 	bool dirty = false;
 	bool show_all = false;
@@ -178,6 +184,7 @@ public:
 	BitmapRef bitmap = nullptr;
 	ChatOverlay* parent = nullptr;
 	FileRequestBinding request = nullptr;
+	bool in_viewport = false;
 
 	ChatEmoji(ChatOverlay* parent, int width, int height, std::string emoji);
 	void RequestBitmap(ChatOverlay* parent);

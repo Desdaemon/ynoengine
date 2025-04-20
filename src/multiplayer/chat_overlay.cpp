@@ -125,6 +125,12 @@ void ChatOverlay::Draw(Bitmap& dst) {
 		text_height = 12;
 	}
 
+	for (auto it = emojiCache.begin(); it != emojiCache.end(); ++it) {
+		if (auto emoji = it->second.lock()) {
+			emoji->in_viewport = false;
+		} 
+	}
+
 	int i = 0;
 	int half_screen = y_end / 2 / text_height;
 
@@ -205,6 +211,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 				bool emojis_only = false;
 
 				// begin override line height for components
+				// if adding new components, remember to update LayoutViewport
 
 				// expand messages with only emojis
 				if (std::any_of(line->cbegin(), line->cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Screenshot>()); })) {
@@ -248,6 +255,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 						offset += Text::Draw(*bitmap, offset, y + (baseline ? baseline - text_height : 0), font, str->color, str->string).x;
 					}
 					else if (auto emoji = span->Downcast<ChatComponents::Emoji>()) {
+						emoji->in_viewport = true;
 						Point dims = emoji->GetSize();
 						if (emojis_only) dims.x = dims.y = line_height;
 						int comp_y = y + (baseline ? baseline - text_height : 0);
@@ -299,6 +307,44 @@ void ChatOverlay::Draw(Bitmap& dst) {
 
 	dst.BlitFast(ox, oy, *bitmap, bitmap->GetRect(), Opacity::Opaque());
 	dirty = false;
+}
+
+ViewportInfo ChatOverlay::LayoutViewport(int text_height, const Font& font) const {
+	Rect screen_rect = DisplayUi->GetScreenSurfaceRect();
+	int y_end = screen_rect.height;
+	int half_screen = y_end / 2 / text_height;
+
+	bool unlocked_start = scroll < half_screen;
+	bool unlocked_end = scroll > messages.size() - half_screen;
+	int last_sticky = std::max(0, (int)messages.size() - half_screen * 2);
+	int viewport = show_all
+		? std::clamp(scroll - half_screen, 0, std::min(scroll + half_screen, last_sticky))
+		: 0;
+
+	int extra = 0, lidx = viewport, scroll_extra = 0, last_sticky_extra = 0;
+	for (auto message = messages.rbegin() + viewport; message != messages.rend(); ++message) {
+		const auto& components = message->text;
+		if (std::any_of(components.cbegin(), components.cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Screenshot>()); })) {
+			last_sticky_extra += extra = ChatScreenshot::sizer().y - text_height;
+		} else if (std::all_of(components.cbegin(), components.cend(), [](const std::shared_ptr<ChatComponent>& comp) { return bool(comp->Downcast<ChatComponents::Emoji>()); })) {
+			last_sticky_extra += extra = (OverlayUtils::LargeScreen() ? 56 : 18) - text_height;
+		} else {
+			auto dims = Text::GetSize(font, message->text_orig);
+			int lines = ceilf(dims.width / (double)bitmap->width());
+			last_sticky_extra += extra = std::max(0, lines - 1) * text_height;
+			lidx += std::max(0, lines - 1);
+		}
+		if (lidx <= scroll) scroll_extra += extra;
+		if (lidx >= last_sticky) break;
+		lidx += 1;
+	}
+
+	ViewportInfo out{};
+	out.scroll_px = scroll * text_height + scroll_extra;
+	out.last_sticky_px = last_sticky * text_height + last_sticky_extra;
+	out.extra = last_sticky_extra;
+
+	return out;
 }
 
 ChatOverlayMessage& ChatOverlay::AddMessage(
@@ -416,8 +462,8 @@ void ChatOverlay::UpdateScene() {
 	if (Input::IsRawKeyTriggered(Input::Keys::RETURN) && !input.empty()) {
 		// TODO: map chat and party chat
 		std::string encoded = Utils::EncodeUTF(input);
-		ChatOverlay::AddMessage(encoded, "blah", "00000000000000000000", "", "", true, true, 0);
-		// GMI().sessionConn.SendPacket(Messages::C2S::SessionGSay{ std::move(encoded) });
+		// ChatOverlay::AddMessage(encoded, "blah", "00000000000000000000", "", "", true, true, 0);
+		GMI().sessionConn.SendPacket(Messages::C2S::SessionSay{ std::move(encoded) });
 		input.clear();
 		dirty = true;
 	}
@@ -654,7 +700,7 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 }
 
 void ChatEmoji::DecodeGif(const std::string& filePath) {
-	constexpr int minimum_frame_delay = 64;
+	constexpr int minimum_frame_delay = 20;
 	frames.clear();
 	frameDelays.clear();
 	auto fs = FileFinder::OpenImage("../images/ynomoji", filePath);
@@ -694,24 +740,21 @@ void ChatEmoji::DecodeGif(const std::string& filePath) {
 }
 
 void ChatEmoji::DecodeWebP(const std::string& filePath) {
-	// Use a WebP decoding library to load the image
-	// Example: libwebp or similar library
-	// Pseudo-code:
 	frames.clear();
 	frameDelays.clear();
 	auto fs = FileFinder::OpenImage("../images/ynomoji", filePath);
 	if (!fs) return;
 
-	auto dec = ImageWebP::Decoder::Create(fs);
+	ImageWebP::Decoder dec(fs);
 	if (!dec) return;
 
 	ImageOut image{};
 	TimingInfo timing{};
 	int smear = 0;
-	while (dec.value().ReadNext(image, timing)) {
-		auto bitmap = Bitmap::Create(image.pixels, image.width, image.height, image.bpp, format_R8G8B8A8_a().format());
+	while (dec.ReadNext(image, timing)) {
+		auto bitmap = Bitmap::Create(image.pixels, image.width, image.height, 0, format_R8G8B8A8_a().format());
 		if (!bitmap) {
-			delete image.pixels;
+			delete[] image.pixels;
 			continue;
 		}
 		bitmap->SetBilinear();
@@ -730,7 +773,6 @@ void ChatEmoji::DecodeWebP(const std::string& filePath) {
 		}
 		loopLength += frameDelays.back();
 	}
-	// if (image.pixels) delete image.pixels;
 
 	currentFrame = 0;
 	if (loopLength && frames.size() > 1) {
@@ -754,7 +796,7 @@ void ChatEmoji::UpdateAnimation() {
 		currentFrame = (currentFrame + 1) % frames.size();
 		lastFrameTime = now;
 		bitmap = frames[currentFrame]; // Update the displayed frame
-		if (parent) parent->MarkDirty(); // Mark the parent as dirty to trigger a redraw
+		if (parent && in_viewport) parent->MarkDirty(); // Mark the parent as dirty to trigger a redraw
 	}
 }
 

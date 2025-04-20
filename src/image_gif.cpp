@@ -26,6 +26,9 @@ ImageGif::Decoder::Decoder(Filesystem_Stream::InputStream& is) noexcept : ImageG
         return;
     }
 
+    scratch.resize(gifFile->SWidth * gifFile->SHeight);
+    std::fill(scratch.begin(), scratch.end(), gifFile->SBackGroundColor | 0xFF000000);
+
     currentFrame = 0;
 }
 
@@ -34,37 +37,35 @@ ImageGif::Decoder::~Decoder() noexcept {
 }
 
 bool ImageGif::Decoder::ReadNext(ImageOut& output, GifTimingInfo& timing) {
-    memset(&output, 0, sizeof(ImageOut));
-    memset(&timing, 0, sizeof(GifTimingInfo));
-
     if (!gifFile || currentFrame >= gifFile->ImageCount) {
         output.pixels = nullptr;
         return false;
     }
 
     const SavedImage* frame = &gifFile->SavedImages[currentFrame];
-    const GifImageDesc& image = frame->ImageDesc;
+    const GifImageDesc& frameInfo = frame->ImageDesc;
 
-    ColorMapObject* colorMap = image.ColorMap ? image.ColorMap : gifFile->SColorMap;
+    ColorMapObject* colorMap = frameInfo.ColorMap ? frameInfo.ColorMap : gifFile->SColorMap;
     if (!colorMap) {
         Output::Warning("ImageGif: No color map found for frame {}", currentFrame);
         output.pixels = nullptr;
         return false;
     }
 
-    output.width = image.Width;
-    output.height = image.Height;
-	output.bpp = 32;
-    output.pixels = new uint32_t[image.Width * image.Height];
+    const int fullWidth = gifFile->SWidth;
+    const int fullHeight = gifFile->SHeight;
+    output.width = fullWidth;
+    output.height = fullHeight;
+	output.bpp = 0;
 
-    const int left = image.Left;
-    const int top = image.Top;
-    const int width = image.Width;
-    const int height = image.Height;
+    const int left = frameInfo.Left;
+    const int top = frameInfo.Top;
+    const int width = frameInfo.Width;
+    const int height = frameInfo.Height;
     const int bg = gifFile->SBackGroundColor;
+    timing.delay = 0;
 
     const GifPixelType* src = frame->RasterBits;
-    // const GifPixelType* srcPrev = currentFrame > 0 ? gifFile->SavedImages[currentFrame - 1].RasterBits : nullptr;
 
     int transparentIndex = -1;
     int disposalMethod = 0;
@@ -82,27 +83,27 @@ bool ImageGif::Decoder::ReadNext(ImageOut& output, GifTimingInfo& timing) {
         }
     }
 
+    if (disposalMethod == 2) {
+        std::fill(scratch.begin(), scratch.end(), bg | 0xFF000000); // Fill with background color
+    }
+
     size_t srcIndex = 0;
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
+    for (int y = top; y < top + height; ++y) {
+        for (int x = left; x < left + width; ++x) {
             GifPixelType index = src[srcIndex++];
             if (index == transparentIndex) {
-                ((uint32_t*)output.pixels)[(top + y) * output.width + (left + x)] = 0; // Transparent pixel
-                continue;
-            }
-            // if (disposalMethod == 2)
-            //     ((uint32_t*)output.pixels)[(top + y) * output.width + (left + x)] = bg;
-            if (index < colorMap->ColorCount) {
+                if (disposalMethod != 1)
+                    scratch[y * fullWidth + x] = 0; // Transparent pixel
+            } else if (index < colorMap->ColorCount) {
                 const GifColorType& color = colorMap->Colors[index];
-                int dstX = left + x;
-                int dstY = top + y;
-                if (dstX < output.width && dstY < output.height) {
-                    ((uint32_t*)output.pixels)[dstY * output.width + dstX] =
-                        color.Red | (color.Green << 8) | (color.Blue << 16) | 0xFF000000;
-                }
+                scratch[y * fullWidth + x] =
+                    color.Red | (color.Green << 8) | (color.Blue << 16) | 0xFF000000;
             }
         }
     }
+
+    output.pixels = new uint32_t[fullWidth * fullHeight];
+    memcpy(output.pixels, scratch.data(), fullWidth * fullHeight * sizeof(uint32_t));
 
     currentFrame++;
     return true;
