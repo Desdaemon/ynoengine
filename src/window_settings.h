@@ -37,6 +37,7 @@ public:
 		eInputListButtonsGame,
 		eInputListButtonsEngine,
 		eInputListButtonsDeveloper,
+		eInputListButtonsOnline,
 		eInputButtonOption,
 		eInputButtonAdd,
 		eInputButtonRemove,
@@ -52,13 +53,16 @@ public:
 		eEnd,
 		eAbout,
 		eLanguage,
+		// online only
+		eOnlineAccount,
 		eLastMode
 	};
 
 	enum OptionMode {
 		eOptionNone,
 		eOptionRangeInput,
-		eOptionPicker
+		eOptionPicker,
+		eOptionStringInput,
 	};
 
 	struct Option {
@@ -73,6 +77,7 @@ public:
 		int original_value;
 		int min_value;
 		int max_value;
+		bool secret = false;
 		std::vector<int> options_index;
 		std::vector<std::string> options_text;
 		std::vector<std::string> options_help;
@@ -139,6 +144,9 @@ private:
 			Action&& action
 	);
 
+	template <typename Action>
+	void AddOption(const StringConfigParam& p, Action&& action);
+
 	void RefreshInput();
 	void RefreshButtonCategory();
 	void RefreshButtonList();
@@ -149,6 +157,7 @@ private:
 	void RefreshEngine();
 	void RefreshEngineFont(bool mincho);
 	void RefreshLicense();
+	void RefreshOnline();
 
 	void UpdateHelp() override;
 

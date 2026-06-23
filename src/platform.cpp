@@ -123,6 +123,29 @@ int64_t Platform::File::GetSize() const {
 #endif
 }
 
+int64_t Platform::File::GetLastModified() const {
+#if defined(_WIN32)
+	WIN32_FILE_ATTRIBUTE_DATA data;
+	BOOL res = ::GetFileAttributesExW(filename.c_str(), GetFileExInfoStandard, &data);
+	if (!res)
+		return -1;
+
+	// the difference between Windows epoch and Unix epoch
+	constexpr ULONGLONG epoch_diff = 11644473600ULL;
+	ULARGE_INTEGER ts;
+	FILETIME ft = data.ftLastWriteTime;
+	ts.LowPart = ft.dwLowDateTime;
+	ts.HighPart = ft.dwHighDateTime;
+	return (int64_t)ts.QuadPart / 10000000ULL - epoch_diff;
+	//return (int64_t)((ts.QuadPart - epoch_diff * 10000000ULL) / 10000000ULL);
+#else
+	struct stat sb = {};
+	int result = ::stat(filename.c_str(), &sb);
+	struct timespec ts = sb.st_mtim;
+	return !result ? (int64_t)ts.tv_sec + (int64_t)ts.tv_nsec / 1000000000 : -1;
+#endif
+}
+
 bool Platform::File::MakeDirectory(bool follow_symlinks) const {
 	if (IsDirectory(follow_symlinks)) {
 		return true;

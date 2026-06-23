@@ -431,7 +431,8 @@ namespace Player {
 	/** game specific configuration */
 	extern Game_ConfigGame game_config;
 
-#ifdef __EMSCRIPTEN__
+	extern std::function<void(Game_Config&)> did_parse_config;
+
 	/** Name of game emscripten uses */
 	extern std::string emscripten_game_name;
 #endif
@@ -562,7 +563,8 @@ inline bool Player::IsPatchUnlockPics() {
 }
 
 inline bool Player::HasEasyRpgExtensions() {
-	return game_config.patch_easyrpg.Get();
+	return true;
+	//return game_config.patch_easyrpg.Get();
 }
 
 #ifdef ENABLE_DYNAMIC_INTERPRETER_CONFIG

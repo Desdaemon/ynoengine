@@ -380,6 +380,59 @@ namespace S2C {
 	public:
 		BadgeUpdatePacket(const PL& v) {}
 	};
+#ifdef PLAYER_YNO
+	class SessionGSay : public S2CPacket {
+	public:
+		SessionGSay(const PL& v)
+			: uuid(v.at(0)),
+			mapid(v.at(1)),
+			prevmapid(v.at(2)),
+			prevlocsstr(v.at(3)),
+			x(Decode<int>(v.at(4))),
+			y(Decode<int>(v.at(5))),
+			msg(v.at(6)),
+			msgid(v.at(7)) {}
+		int x, y;
+		std::string uuid;
+		std::string mapid;
+		std::string prevmapid;
+		std::string prevlocsstr;
+		std::string msg;
+		std::string msgid;
+	};
+	class SessionSay : public S2CPacket {
+	public:
+		SessionSay(const PL& v)
+			: uuid(v.at(0)),
+			msg(v.at(1)) {}
+		std::string uuid;
+		std::string msg;
+	};
+	class SessionPlayerInfo : public S2CPacket {
+	public:
+		SessionPlayerInfo(const PL& v) :
+			uuid(v.at(0)),
+			name(v.at(1)),
+			systemName(v.at(2)),
+			rank(Decode<int>(v.at(3))),
+			account(Decode<bool>(v.at(4))),
+			badge(v.at(5))
+		{}
+		int rank;
+		bool account;
+		std::string uuid;
+		std::string name;
+		std::string systemName;
+		std::string badge;
+		// TODO: Medals?
+	};
+	class SessionPlayerCount : public S2CPacket {
+	public:
+		SessionPlayerCount(const PL& v) :
+			player_count(Decode<int>(v.at(0))) {}
+		int player_count;
+	};
+#endif
 }
 namespace C2S {
 	using C2SPacket = Multiplayer::C2SPacket;
@@ -619,7 +672,32 @@ namespace C2S {
 		int event_id;
 		int action_bin;
 	};
-
+#ifdef PLAYER_YNO
+	class SessionPlayerName : public C2SPacket {
+	public:
+		SessionPlayerName(std::string name_) : C2SPacket("name"),
+			name(name_) {}
+		std::string ToBytes() const override { return Build(name); }
+	protected:
+		std::string name;
+	};
+	class SessionGSay : public C2SPacket {
+	public:
+		SessionGSay(std::string contents) : C2SPacket("gsay"),
+			contents(std::move(contents)) {}
+		std::string ToBytes() const override { return Build(contents); }
+	protected:
+		std::string contents;
+	};
+	class SessionSay : public C2SPacket {
+	public:
+		SessionSay(std::string contents) : C2SPacket("say"),
+			contents(std::move(contents)) {}
+		std::string ToBytes() const override { return Build(contents); }
+	protected:
+		std::string contents;
+	};
+#endif
 }
 }
 

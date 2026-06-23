@@ -21,6 +21,15 @@ void Connection::FlushQueue() {
 }
 
 void Connection::Dispatch(std::string_view name, ParameterList args) {
+	if (raw_handler) {
+		std::string os{};
+		for (auto it = args.begin(); it != args.end(); ++it) {
+			os.append(*it);
+			if (std::next(it) != args.end())
+				os.append(Packet::PARAM_DELIM);
+		}
+		raw_handler(name, os);
+	}
 	auto it = handlers.find(std::string(name));
 	if (it != handlers.end()) {
 		std::invoke(it->second, args);

@@ -235,7 +235,7 @@ void Translation::SelectLanguageAsync(FileRequestResult*, std::string_view lang_
 	}
 
 	// Reset the cache, so that all images load fresh.
-	Cache::Clear();
+	Cache::ClearAll();
 
 	Scene::instance->OnTranslationChanged();
 }

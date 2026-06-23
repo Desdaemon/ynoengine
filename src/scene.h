@@ -60,6 +60,8 @@ public:
 		Teleport,
 		Settings,
 		LanguageMenu,
+		// Online play only
+		ChatOverlay,
 		SceneMax
 	};
 

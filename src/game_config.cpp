@@ -692,6 +692,11 @@ void Game_Config::LoadFromStream(Filesystem_Stream::InputStream& is) {
 	player.automatic_screenshots.FromIni(ini);
 	player.automatic_screenshots_interval.FromIni(ini);
 	player.prefer_easyrpg_map_files.FromIni(ini);
+
+	/** online */
+	online.session_token.FromIni(ini);
+	online.username.FromIni(ini);
+	online.nametag_mode.FromIni(ini);
 }
 
 void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
@@ -787,5 +792,12 @@ void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
 	player.automatic_screenshots_interval.ToIni(os);
 	player.prefer_easyrpg_map_files.ToIni(os);
 
+	os << "\n";
+
+	// online section
+	os << "[Online]\n";
+	online.session_token.ToIni(os);
+	online.username.ToIni(os);
+	online.nametag_mode.ToIni(os);
 	os << "\n";
 }

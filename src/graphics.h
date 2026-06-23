@@ -24,9 +24,14 @@
 #include "drawable.h"
 #include "drawable_list.h"
 #include "game_clock.h"
+#include "baseui.h"
 
 class MessageOverlay;
 class Scene;
+#ifdef PLAYER_YNO
+class ChatOverlay;
+class StatusOverlay;
+#endif
 
 /**
  * Graphics namespace.
@@ -48,9 +53,9 @@ namespace Graphics {
 	 */
 	void Update();
 
-	void Draw(Bitmap& dst);
+	void Draw(BaseUi& ui);
 
-	void LocalDraw(Bitmap& dst, Drawable::Z_t min_z, Drawable::Z_t max_z);
+	void LocalDraw(Bitmap& dst, Bitmap& dst_screen, Drawable::Z_t min_z, Drawable::Z_t max_z);
 
 	std::shared_ptr<Scene> UpdateSceneCallback();
 
@@ -61,6 +66,10 @@ namespace Graphics {
 	 * @return message overlay
 	 */
 	MessageOverlay& GetMessageOverlay();
+
+	ChatOverlay& GetChatOverlay();
+
+	StatusOverlay& GetStatusOverlay();
 }
 
 #endif
