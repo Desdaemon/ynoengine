@@ -201,8 +201,10 @@ private:
 	int loopLength = 0;
 	std::chrono::steady_clock::time_point lastFrameTime; // Time of the last frame update
 
+#ifdef PLAYER_YNO
 	void DecodeGif(const std::string& filePath);
 	void DecodeWebP(const std::string& filePath);
+#endif
 };
 
 class ChatScreenshot : public ChatComponent {

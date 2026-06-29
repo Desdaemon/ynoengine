@@ -40,7 +40,7 @@
 #  include "platform/emscripten/interface.h"
 #endif
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/messages.h"
 #endif
 

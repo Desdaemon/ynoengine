@@ -10,7 +10,7 @@
 #include <lcf/rpg/sound.h>
 #include "yno_connection.h"
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "game_config.h"
 #  include "game_clock.h"
 
@@ -53,6 +53,7 @@ public:
 	bool IsBattleAnimSynced(int anim_id);
 	void PlayerBattleAnimShown(int anim_id);
 	void ApplyPlayerBattleAnimUpdates();
+	void ApplyFlash(int r, int g, int b, int power, int frames);
 	void ApplyRepeatingFlashes();
 	void ApplyTone(Tone tone);
 	void ApplyScreenTone();
@@ -66,25 +67,29 @@ public:
 	} settings;
 
 	YNOConnection connection;
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	YNOConnection sessionConn;
 	struct PlayerData {
 	public:
 		std::string name;
 		std::string systemName;
+#  ifdef PLAYER_YNO
 		int rank;
 		bool account;
 		std::string badge;
+#  endif
 	};
 	struct ChatMsg {
 	public:
 		std::string_view content;
 		std::string_view sender;
 		std::string_view system;
+#  ifdef PLAYER_YNO
 		std::string_view badge;
 		bool syncing = false;
 		bool account = true;
 		bool global = true;
+#  endif
 	};
 	//std::function<void(ChatMsg)> on_chat_msg;
 	std::function<void(std::string_view system)> on_system_graphic_change;

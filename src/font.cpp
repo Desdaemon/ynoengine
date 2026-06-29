@@ -59,7 +59,7 @@
 
 #include "multiplayer/game_multiplayer.h"
 #include "graphics.h"
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/chat_overlay.h"
 #  include "multiplayer/status_overlay.h"
 #endif
@@ -717,7 +717,7 @@ FontRef Font::ChatText() {
 void Font::SetChatText(FontRef new_chat_text) {
 	chat_text = new_chat_text;
 	chat_text->SetFallbackFont(DefaultBitmapFont());
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	Graphics::GetChatOverlay().OnResolutionChange();
 	Graphics::GetStatusOverlay().OnResolutionChange();
 #endif

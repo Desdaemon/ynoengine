@@ -26,7 +26,9 @@ namespace S2C {
 	class SyncPlayerDataPacket : public S2CPacket {
 	public:
 		SyncPlayerDataPacket(const PL& v)
-			: host_id(Decode<int>(v.at(0))),
+			: host_id(Decode<int>(v.at(0)))
+			#ifdef PLAYER_YNO
+			,
 			key(v.at(1)),
 			uuid(v.at(2)),
 			rank(Decode<int>(v.at(3))),
@@ -38,15 +40,19 @@ namespace S2C {
 				Decode<int>(v.at(8)),
 				Decode<int>(v.at(9)),
 				Decode<int>(v.at(10))
-			} {}
+			}
+			#endif
+			{}
 
 		const int host_id;
+		#ifdef PLAYER_YNO
 		const std::string key;
 		const std::string uuid;
 		const int rank;
 		const int account_bin;
 		const std::string badge;
 		const int medals[5];
+		#endif
 	};
 
 	class RoomInfoPacket : public S2CPacket {
@@ -380,7 +386,7 @@ namespace S2C {
 	public:
 		BadgeUpdatePacket(const PL& v) {}
 	};
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	class SessionGSay : public S2CPacket {
 	public:
 		SessionGSay(const PL& v)
@@ -672,7 +678,7 @@ namespace C2S {
 		int event_id;
 		int action_bin;
 	};
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	class SessionPlayerName : public C2SPacket {
 	public:
 		SessionPlayerName(std::string name_) : C2SPacket("name"),

@@ -40,8 +40,11 @@ using json = nlohmann::json;
 #include "compiler.h"
 #include "icons.h"
 #include "overlay_utils.h"
+
+#ifdef PLAYER_YNO
 #include "image_webp.h"
 #include "image_gif.h"
+#endif
 
 namespace {
 	Point ChatTextSquare() {
@@ -128,7 +131,7 @@ void ChatOverlay::Draw(Bitmap& dst) {
 	for (auto it = emojiCache.begin(); it != emojiCache.end(); ++it) {
 		if (auto emoji = it->second.lock()) {
 			emoji->in_viewport = false;
-		} 
+		}
 	}
 
 	int i = 0;
@@ -683,12 +686,14 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 			return;
 		}
 		switch (extension) {
+			#ifdef PLAYER_YNO
 			case FileExtensions::gif:
 				DecodeGif(result->file);
 				break;
 			case FileExtensions::webp:
 				DecodeWebP(result->file);
 				break;
+			#endif
 			case FileExtensions::png:
 				bitmap = Cache::Emoji(result->file);
 				bitmap->SetBilinear();
@@ -699,6 +704,7 @@ void ChatEmoji::RequestBitmap(ChatOverlay* parent_) {
 	req->Start();
 }
 
+#ifdef PLAYER_YNO
 void ChatEmoji::DecodeGif(const std::string& filePath) {
 	constexpr int minimum_frame_delay = 20;
 	frames.clear();
@@ -784,6 +790,7 @@ void ChatEmoji::DecodeWebP(const std::string& filePath) {
 		}
 	}
 }
+#endif
 
 void ChatEmoji::UpdateAnimation() {
 	if (frames.size() == 1) bitmap = frames[0]; // If there's only one frame, just display it

@@ -15,6 +15,9 @@
 #    include "multiplayer/status_overlay.h"
 #    define JS_EVAL(...) (DisplayUi ? ((Sdl2Ui*)DisplayUi.get())->GetWebview().dispatch([=]{ ((Sdl2Ui*)DisplayUi.get())->GetWebview().eval(fmt::format(__VA_ARGS__)); }) : webview::noresult{})
      using json = nlohmann::json;
+#  elif defined(PLAYER_MP)
+#    include <fmt/format.h>
+#    include "player.h"
 #  endif
 #  define EM_ASM_INT(...) 0
 #  define EM_ASM(...)
@@ -28,6 +31,15 @@ std::string Web_API::GetSocketURL() {
 	if (game.empty())
 		game = "2kki";
 	return fmt::format("wss://connect.ynoproject.net/{}/", game);
+#elif defined(PLAYER_MP)
+	if (!Player::server_sessions_url.empty())
+		return Player::server_sessions_url;
+	{
+		std::string_view game = Player::emscripten_game_name;
+		if (game.empty())
+			game = "2kki";
+		return fmt::format("wss://connect.ynoproject.net/{}/", game);
+	}
 #else
 	return reinterpret_cast<char*>(EM_ASM_INT({
 	  var ws = Module.wsUrl;
@@ -44,7 +56,7 @@ void Web_API::OnLoadMap(std::string_view name) {
 	std::string name_(name);
 	JS_EVAL(R"js(onLoadMap("{}"))js", name_);
 	return;
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onLoadMap(UTF8ToString($0));
 	}, name.data(), name.size());
@@ -54,7 +66,7 @@ void Web_API::OnLoadMap(std::string_view name) {
 void Web_API::OnRoomSwitch() {
 #ifdef PLAYER_YNO
 	JS_EVAL("onRoomSwitch()");
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onRoomSwitch();
 	});
@@ -65,7 +77,7 @@ void Web_API::SyncPlayerData(std::string_view uuid, int rank, int account_bin, s
 #ifdef PLAYER_YNO
 	std::string uuid_(uuid), badge_(badge);
 	JS_EVAL(R"js(syncPlayerData("{}", {}, {}, "{}", [{}, {}, {}, {}, {}], {}))js", uuid_, rank, account_bin, badge_, medals[0], medals[1], medals[2], medals[3], medals[4], id);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		syncPlayerData(UTF8ToString($0, $1), $2, $3, UTF8ToString($4, $5), [ $6, $7, $8, $9, $10 ], $11);
 	}, uuid.data(), uuid.size(), rank, account_bin, badge.data(), badge.size(), medals[0], medals[1], medals[2], medals[3], medals[4], id);
@@ -75,7 +87,7 @@ void Web_API::SyncPlayerData(std::string_view uuid, int rank, int account_bin, s
 void Web_API::OnPlayerDisconnect(int id) {
 #ifdef PLAYER_YNO
 	JS_EVAL("onPlayerDisconnected({})", id);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onPlayerDisconnected($0);
 	}, id);
@@ -86,7 +98,7 @@ void Web_API::OnPlayerNameUpdated(std::string_view name, int id) {
 #ifdef PLAYER_YNO
 	std::string name_(name);
 	JS_EVAL(R"js(onPlayerConnectedOrUpdated("", "{}", {}))js", name_, id);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onPlayerConnectedOrUpdated("", UTF8ToString($0, $1), $2);
 	}, name.data(), name.size(), id);
@@ -97,7 +109,7 @@ void Web_API::OnPlayerSystemUpdated(std::string_view system, int id) {
 #ifdef PLAYER_YNO
 	std::string system_(system);
 	JS_EVAL(R"js(onPlayerConnectedOrUpdated("{}", "", {}))js", system_, id);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onPlayerConnectedOrUpdated(UTF8ToString($0, $1), "", $2);
 	}, system.data(), system.size(), id);
@@ -107,7 +119,7 @@ void Web_API::OnPlayerSystemUpdated(std::string_view system, int id) {
 void Web_API::UpdateConnectionStatus(int status) {
 #ifdef PLAYER_YNO
 	JS_EVAL("onUpdateConnectionStatus({})", status);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onUpdateConnectionStatus($0);
 	}, status);
@@ -117,7 +129,7 @@ void Web_API::UpdateConnectionStatus(int status) {
 void Web_API::ReceiveInputFeedback(int s) {
 #ifdef PLAYER_YNO
 	JS_EVAL("onReceiveInputFeedback({})", s);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onReceiveInputFeedback($0);
 	}, s);
@@ -127,7 +139,7 @@ void Web_API::ReceiveInputFeedback(int s) {
 void Web_API::NametagModeUpdated(int m) {
 #ifdef PLAYER_YNO
 	JS_EVAL("onNametagModeUpdated({})", m);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onNametagModeUpdated($0);
 	}, m);
@@ -138,7 +150,7 @@ void Web_API::OnPlayerSpriteUpdated(std::string_view name, int index, int id) {
 #ifdef PLAYER_YNO
 	std::string name_(name);
 	JS_EVAL(R"js(onPlayerSpriteUpdated("{}", {}, {}))js", name_, index, id);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onPlayerSpriteUpdated(UTF8ToString($0, $1), $2, $3);
 	}, name.data(), name.size(), index, id);
@@ -148,7 +160,7 @@ void Web_API::OnPlayerSpriteUpdated(std::string_view name, int index, int id) {
 void Web_API::OnPlayerTeleported(int map_id, int x, int y) {
 #ifdef PLAYER_YNO
 	JS_EVAL("onPlayerTeleported({}, {}, {})", map_id, x, y);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onPlayerTeleported($0, $1, $2);
 	}, map_id, x, y);
@@ -159,7 +171,7 @@ void Web_API::OnUpdateSystemGraphic(std::string_view sys) {
 #ifdef PLAYER_YNO
 	std::string sys_(sys);
 	JS_EVAL(R"js( onUpdateSystemGraphic("{}") )js", sys_);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onUpdateSystemGraphic(UTF8ToString($0, $1));
 	}, sys.data(), sys.size());
@@ -169,7 +181,7 @@ void Web_API::OnUpdateSystemGraphic(std::string_view sys) {
 void Web_API::OnRequestBadgeUpdate() {
 #ifdef PLAYER_YNO
 	JS_EVAL("onBadgeUpdateRequested()");
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onBadgeUpdateRequested();
 	});
@@ -180,7 +192,7 @@ void Web_API::ShowToastMessage(std::string_view msg, std::string_view icon) {
 #ifdef PLAYER_YNO
 	std::string msg_(msg), icon_(icon);
 	JS_EVAL(R"js( showClientToastMessage("{}", "{}") )js", msg_, icon_);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		showClientToastMessage(UTF8ToString($0, $1), UTF8ToString($2, $3));
 	}, msg.data(), msg.size(), icon.data(), icon.size());
@@ -190,7 +202,7 @@ void Web_API::ShowToastMessage(std::string_view msg, std::string_view icon) {
 bool Web_API::ShouldConnectPlayer(std::string_view uuid) {
 #ifdef PLAYER_YNO
 	return true;
-#else
+#elif defined(__EMSCRIPTEN__)
 	int result = EM_ASM_INT({
 		return shouldConnectPlayer(UTF8ToString($0, $1)) ? 1 : 0;
 	}, uuid.data(), uuid.size());
@@ -202,7 +214,7 @@ void Web_API::OnRequestFile(std::string_view path) {
 #ifdef PLAYER_YNO
 	std::string path_(path);
 	JS_EVAL(R"js( onRequestFile("{}") )js", path_);
-#else
+#elif defined(__EMSCRIPTEN__)
 	EM_ASM({
 		onRequestFile(UTF8ToString($0, $1));
 	}, path.data(), path.size());

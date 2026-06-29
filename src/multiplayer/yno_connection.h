@@ -19,7 +19,7 @@ public:
 	YNOConnection& operator=(YNOConnection&&);
 	~YNOConnection();
 
-	bool need_header = true;
+	bool need_header = false;
 
 	void Open(std::string_view uri) override;
 	void Send(std::string_view data) override;

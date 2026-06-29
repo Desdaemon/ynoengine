@@ -31,7 +31,7 @@
 #  include <emscripten.h>
 #endif
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include <uv.h>
 #  include "multiplayer/chat_overlay.h"
 #  include "multiplayer/status_overlay.h"
@@ -144,6 +144,8 @@ namespace Player {
 	Game_ConfigGame game_config;
 	std::function<void(Game_Config&)> did_parse_config;
 	std::string emscripten_game_name;
+	std::string server_assets_url;
+	std::string server_sessions_url;
 	Game_Clock::time_point last_auto_screenshot;
 }
 
@@ -206,7 +208,7 @@ void Player::Init(std::vector<std::string> args) {
 
 	Input::Init(cfg.input, replay_input_path, record_input_path);
 	Input::AddRecordingData(Input::RecordingData::CommandLine, command_line);
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	GMI().SetConfig(cfg.online);
 #endif
 
@@ -268,7 +270,7 @@ void Player::MainLoop() {
 		Scene::instance->MainFunction();
 
 		Graphics::GetMessageOverlay().Update();
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		Graphics::GetChatOverlay().Update();
 		Graphics::GetStatusOverlay().Update();
 #endif
@@ -333,7 +335,7 @@ void Player::UpdateInput() {
 	if (Input::IsSystemTriggered(Input::SHOW_LOG)) {
 		Output::ToggleLog();
 	}
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	if (Input::IsSystemTriggered(Input::SHOW_CHAT)) {
 		Graphics::GetChatOverlay().SetShowAll();
 	}

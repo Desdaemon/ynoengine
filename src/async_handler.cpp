@@ -26,7 +26,7 @@ using json = nlohmann::json;
 #ifdef __EMSCRIPTEN__
 #  include <emscripten.h>
 #  include <lcf/reader_util.h>
-#elif defined(PLAYER_YNO)
+#elif defined(PLAYER_MP)
 #  include <lcf/reader_util.h>
 #  include <cpr/cpr.h>
 #  include <uv.h>
@@ -198,8 +198,7 @@ namespace {
 
 				ctx->http_status = resp.status_code;
 				if (resp.status_code == 0) {
-					ctx->http_status = 1000 + (int)resp.error.code;
-					Output::Debug("failed {}: {}", resp.error.message);
+					Output::Error("failed: {}", resp.error.message);
 				}
 				if (ctx->file == "RPG_RT.ldb") {
 					// use this file to determine cache freshness
@@ -378,7 +377,7 @@ void AsyncHandler::SaveFilesystem(int slot_id) {
 			onSaveSlotUpdated($0);
 		});
 	}, slot_id);
-#elif defined(PLAYER_YNO)
+#elif defined(PLAYER_MP)
 	if (slot_id != 1) return;
 	GMI().UploadSaveFile();
 #endif
@@ -434,22 +433,28 @@ void FileRequestAsync::Start() {
 
 	state = State_Pending;
 
-#if defined(__EMSCRIPTEN__) || defined(PLAYER_YNO)
+#if defined(__EMSCRIPTEN__) || defined(PLAYER_MP)
 	std::string request_path;
 #  ifdef EM_GAME_URL
 	request_path = EM_GAME_URL;
 #  else
-	if (parent_scope)
-		request_path = "https://ynoproject.net/";
-	else
-		request_path = "https://ynoproject.net/data/";
-#  endif
-
-	if (!Player::emscripten_game_name.empty()) {
-		request_path += Player::emscripten_game_name + "/";
+	if (!Player::server_assets_url.empty()) {
+		request_path = Player::server_assets_url;
+		if (request_path.back() != '/')
+			request_path += '/';
 	} else {
-		request_path += "2kki/";
+		if (parent_scope)
+			request_path = "https://ynoproject.net/";
+		else
+			request_path = "https://ynoproject.net/data/";
+
+		if (!Player::emscripten_game_name.empty()) {
+			request_path += Player::emscripten_game_name + "/";
+		} else {
+			request_path += "2kki/";
+		}
 	}
+#  endif
 
 	std::string modified_path;
 	if (index_version >= 2) {
@@ -503,7 +508,7 @@ void FileRequestAsync::Start() {
 
 	std::string request_file = (it != file_mapping.end() ? it->second : path);
 
-#ifndef EMSCRIPTEN
+#ifndef __EMSCRIPTEN__
 	if (Platform::File(request_path).GetLastModified() >= db_lastwrite) {
 		DownloadDone(true);
 		return;

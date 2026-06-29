@@ -40,7 +40,9 @@
 			"displayName": "windows base preset",
 			"hidden": true,
 			"toolchainFile": "$env{EASYRPG_BUILDSCRIPTS}/windows/vcpkg/scripts/buildsystems/vcpkg.cmake",
-			"inherits": ["base"],
+			"inherits": [
+				"base"
+			],
 			"condition": {
 				"type": "equals",
 				"lhs": "${hostSystemName}",
@@ -97,6 +99,24 @@
 			"hidden": true,
 			"cacheVariables": {
 				"PLAYER_TARGET_PLATFORM": "libretro"
+			}
+		},
+		{
+			"name": "build-ynoshell",
+			"displayName": "enables building a YNO desktop shell",
+			"hidden": true,
+			"cacheVariables": {
+				"PLAYER_TARGET_PLATFORM": "SDL3",
+				"PLAYER_SHELL": "yno"
+			}
+		},
+		{
+			"name": "build-mp",
+			"displayName": "enables building a YNO-compatible generic client",
+			"hidden": true,
+			"cacheVariables": {
+				"PLAYER_TARGET_PLATFORM": "SDL3",
+				"PLAYER_SHELL": "mp"
 			}
 		}
 	]

@@ -27,7 +27,7 @@
 #include "pending_message.h"
 #include "memory_management.h"
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include <variant>
 #  include <optional>
 #  include <type_traits>
@@ -94,7 +94,7 @@ namespace Game_Message {
 	int WordWrap(std::string_view line, int limit, const WordWrapCallback& callback);
 	int WordWrap(std::string_view line, int limit, const WordWrapCallback& callback, const Font& font);
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	using ComponentWrapCallback = const std::function<void(lcf::Span<std::shared_ptr<ChatComponent>> spans)>;
 	int WordWrap(lcf::Span<std::shared_ptr<ChatComponent>> spans, const int limit, const ComponentWrapCallback& callback, const Font& font);
 #endif

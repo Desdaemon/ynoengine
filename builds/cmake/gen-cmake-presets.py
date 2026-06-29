@@ -27,7 +27,9 @@ platform_display = dict(
 	sdl1="SDL1",
 	sdl2="SDL2",
 	sdl3="SDL3",
-	libretro="libretro core"
+	libretro="libretro core",
+	ynoshell="YNO desktop shell",
+	mp="Multiplayer",
 )
 
 # This creates the following configurePresets from the one in the template:

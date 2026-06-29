@@ -253,10 +253,6 @@ add_library(${PROJECT_NAME} OBJECT
 	src/image_png.h
 	src/image_xyz.cpp
 	src/image_xyz.h
-	src/image_webp.cpp
-	src/image_webp.h
-	src/image_gif.cpp
-	src/image_gif.h
 	src/input_buttons_desktop.cpp
 	src/input_buttons.h
 	src/input.cpp
@@ -529,25 +525,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 	src/window_stringinput.cpp
 )
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-	target_sources(${PROJECT_NAME} PRIVATE
-		src/multiplayer/chat_overlay.h
-		src/multiplayer/chat_overlay.cpp
-		src/multiplayer/status_overlay.h
-		src/multiplayer/status_overlay.cpp
-		src/multiplayer/scene_overlay.h
-		src/multiplayer/scene_overlay.cpp
-		src/multiplayer/scene_online.h
-		src/multiplayer/scene_online.cpp
-		src/multiplayer/scene_nexus.h
-		src/multiplayer/scene_nexus.cpp
-		src/multiplayer/webview.h
-	)
-	if(WIN32)
-		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress
-	endif()
-endif()
-
 include(CMakeDependentOption)
 
 # Include directories
@@ -613,11 +590,12 @@ endif()
 set(PLAYER_BUILD_EXECUTABLE ON)
 set(PLAYER_TEST_LIBRARIES ${PROJECT_NAME})
 
-set(PLAYER_SHELL "none" CACHE STRING "Optional UI shell, options: none yno")
-set_property(CACHE PLAYER_SHELL PROPERTY STRINGS none yno)
+set(PLAYER_SHELL "none" CACHE STRING "Optional UI shell, options: none yno mp")
+set_property(CACHE PLAYER_SHELL PROPERTY STRINGS none yno generic)
 
 if(${PLAYER_SHELL} STREQUAL "yno")
-	set(PLAYER_YNO TRUE)
+	set(PLAYER_MP TRUE)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_MP)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_YNO)
 
 	#player_find_package(NAME wxWidgets REQUIRED)
@@ -634,10 +612,47 @@ if(${PLAYER_SHELL} STREQUAL "yno")
 	find_package(WebP CONFIG REQUIRED)
 	target_link_libraries(${PROJECT_NAME} WebP::webp WebP::webpdecoder WebP::webpdemux)
 
+elseif(${PLAYER_SHELL} STREQUAL "mp")
+	set(PLAYER_MP TRUE)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC PLAYER_MP)
 elseif(${PLAYER_SHELL} STREQUAL "none")
 	# do nothing
 else()
 	message(FATAL_ERROR "Invalid shell ${PLAYER_SHELL}")
+endif()
+
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+	if(PLAYER_MP)
+		target_sources(${PROJECT_NAME} PRIVATE
+			src/multiplayer/chat_overlay.h
+			src/multiplayer/chat_overlay.cpp
+			src/multiplayer/status_overlay.h
+			src/multiplayer/status_overlay.cpp
+			src/multiplayer/scene_overlay.h
+			src/multiplayer/scene_overlay.cpp
+			src/multiplayer/scene_online.h
+			src/multiplayer/scene_online.cpp
+		)
+		if(PLAYER_YNO)
+			target_sources(${PROJECT_NAME} PRIVATE
+				src/multiplayer/scene_nexus.h
+				src/multiplayer/scene_nexus.cpp
+				src/multiplayer/webview.h
+				src/image_webp.cpp
+				src/image_webp.h
+				src/image_gif.cpp
+				src/image_gif.h
+			)
+		else()
+			target_sources(${PROJECT_NAME} PRIVATE
+				src/multiplayer/scene_serverbrowser.h
+				src/multiplayer/scene_serverbrowser.cpp
+			)
+		endif()
+	endif()
+	if(WIN32)
+		target_link_libraries(${PROJECT_NAME} synchronization) # provides WaitOnAddress
+	endif()
 endif()
 
 if(ANDROID AND PLAYER_GRADLE_BUILD)
@@ -1056,7 +1071,7 @@ player_find_package(NAME lhasa
 )
 
 # json support
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten" OR PLAYER_MP)
 	player_find_package(NAME nlohmann_json
 		VERSION 3.9.1
 		DEFINITION HAVE_NLOHMANN_JSON
@@ -1071,7 +1086,9 @@ else()
 		TARGET nlohmann_json::nlohmann_json
 		ONLY_CONFIG
 	)
+endif()
 
+if(PLAYER_MP)
 	find_package(Libwebsockets CONFIG REQUIRED)
 	# require_lws_config(LWS_ROLE_H1 1 requirements)
 	# require_lws_config(LWS_WITHOUT_CLIENT 0 requirements)
@@ -1102,6 +1119,9 @@ else()
 		FetchContent_MakeAvailable(cpr)
 	endif()
 	target_link_libraries(${PROJECT_NAME} cpr::cpr)
+
+	player_find_package(NAME LibUV REQUIRED TARGET LibUV::LibUV)
+	target_link_libraries(${PROJECT_NAME} LibUV::LibUV)
 endif()
 
 # Configure Audio backends
@@ -1370,10 +1390,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 			"-sALLOW_MEMORY_GROWTH -sMINIFY_HTML=0 -sMODULARIZE -sEXPORT_NAME=createEasyRpgPlayer \
 			 -sEXIT_RUNTIME=0 --bind --pre-js ${PLAYER_JS_PREJS} --post-js ${PLAYER_JS_POSTJS} \
 			 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$autoResumeAudioContext','$dynCall'] \
-			 -sEXPORTED_FUNCTIONS=_main,_malloc,_free \
-			 -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8'] \
-			 -sGL_ENABLE_GET_PROC_ADDRESS")
-			 -sEXPORTED_FUNCTIONS=_main,_malloc,_free")
+			 -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8']")
 		set_source_files_properties("src/platform/sdl/main.cpp" PROPERTIES
 			OBJECT_DEPENDS "${PLAYER_JS_PREJS};${PLAYER_JS_POSTJS};${PLAYER_JS_SHELL}")
 

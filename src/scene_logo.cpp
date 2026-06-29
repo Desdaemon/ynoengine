@@ -37,9 +37,10 @@
 #include <ctime>
 #include <memory>
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/game_multiplayer.h"
 #  include "multiplayer/scene_nexus.h"
+#  include "multiplayer/scene_serverbrowser.h"
 #endif
 
 Scene_Logo::Scene_Logo() :
@@ -120,13 +121,15 @@ void Scene_Logo::vUpdate() {
 				std::string save_name = save.FindFile(ss.str());
 				Player::LoadSavegame(save_name, Player::load_game_id);
 			}
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 				GMI().InitSession();
 #endif
 		}
 		else {
 #ifdef PLAYER_YNO
 			Scene::Push(std::make_shared<Scene_Nexus>(), true);
+#elif defined(PLAYER_MP)
+			Scene::Push(std::make_shared<Scene_ServerBrowser>(), true);
 #else
 			Scene::Push(std::make_shared<Scene_GameBrowser>(), true);
 #endif
@@ -144,7 +147,7 @@ bool Scene_Logo::DetectGame() {
 		FileFinder::SetGameFilesystem(fs);
 	}
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	if (Player::emscripten_game_name.empty()) {
 		async_ready = true;
 		return true;

@@ -154,6 +154,60 @@
 			]
 		},
 		{
+			"name": "ynoshell-debug",
+			"displayName": "System environment (YNO desktop shell, Debug)",
+			"inherits": [
+				"build-ynoshell",
+				"parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "ynoshell-relwithdebinfo",
+			"displayName": "System environment (YNO desktop shell, RelWithDebInfo)",
+			"inherits": [
+				"build-ynoshell",
+				"parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "ynoshell-release",
+			"displayName": "System environment (YNO desktop shell, Release)",
+			"inherits": [
+				"build-ynoshell",
+				"parent",
+				"type-release"
+			]
+		},
+		{
+			"name": "mp-debug",
+			"displayName": "System environment (Multiplayer, Debug)",
+			"inherits": [
+				"build-mp",
+				"parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "mp-relwithdebinfo",
+			"displayName": "System environment (Multiplayer, RelWithDebInfo)",
+			"inherits": [
+				"build-mp",
+				"parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "mp-release",
+			"displayName": "System environment (Multiplayer, Release)",
+			"inherits": [
+				"build-mp",
+				"parent",
+				"type-release"
+			]
+		},
+		{
 			"name": "linux-parent",
 			"toolchainFile": "${sourceDir}/builds/cmake/LinuxToolchain.cmake",
 			"cacheVariables": {
@@ -293,22 +347,6 @@
 				"linux-parent",
 				"type-release"
 			]
-		},
-		{
-			"name": "linux-ynoshell-relwithdebinfo",
-			"displayName": "Linux (ynoshell, RelWithDebInfo)",
-			"inherits": "linux-relwithdebinfo",
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno"
-			}
-		},
-		{
-			"name": "linux-ynoshell-release",
-			"displayName": "Linux (ynoshell, Release)",
-			"inherits": "linux-release",
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno"
-			}
 		},
 		{
 			"name": "windows-parent",
@@ -539,6 +577,60 @@
 			]
 		},
 		{
+			"name": "windows-x86-vs2022-ynoshell-debug",
+			"displayName": "Windows (x86) using Visual Studio 2022 (YNO desktop shell, Debug)",
+			"inherits": [
+				"build-ynoshell",
+				"windows-x86-vs2022-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "windows-x86-vs2022-ynoshell-relwithdebinfo",
+			"displayName": "Windows (x86) using Visual Studio 2022 (YNO desktop shell, RelWithDebInfo)",
+			"inherits": [
+				"build-ynoshell",
+				"windows-x86-vs2022-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "windows-x86-vs2022-ynoshell-release",
+			"displayName": "Windows (x86) using Visual Studio 2022 (YNO desktop shell, Release)",
+			"inherits": [
+				"build-ynoshell",
+				"windows-x86-vs2022-parent",
+				"type-release"
+			]
+		},
+		{
+			"name": "windows-x86-vs2022-mp-debug",
+			"displayName": "Windows (x86) using Visual Studio 2022 (Multiplayer, Debug)",
+			"inherits": [
+				"build-mp",
+				"windows-x86-vs2022-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "windows-x86-vs2022-mp-relwithdebinfo",
+			"displayName": "Windows (x86) using Visual Studio 2022 (Multiplayer, RelWithDebInfo)",
+			"inherits": [
+				"build-mp",
+				"windows-x86-vs2022-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "windows-x86-vs2022-mp-release",
+			"displayName": "Windows (x86) using Visual Studio 2022 (Multiplayer, Release)",
+			"inherits": [
+				"build-mp",
+				"windows-x86-vs2022-parent",
+				"type-release"
+			]
+		},
+		{
 			"name": "windows-x64-vs2022-parent",
 			"generator": "Visual Studio 17 2022",
 			"architecture": "x64",
@@ -655,50 +747,56 @@
 		},
 		{
 			"name": "windows-x64-vs2022-ynoshell-debug",
-			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Debug)",
-			"inherits": "windows-x64-vs2022-debug",
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno"
-			}
-		},
-		{
-			"name": "windows-x64-vs2022-ynoshell-release",
-			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (Release)",
-			"inherits": "windows-x64-vs2022-release",
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno"
-			}
-		},
-		{
-			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
-			"displayName": "Windows (x64) using Visual Studio 2022 (ynoshell) (RelWithDebInfo)",
-			"inherits": "windows-x64-vs2022-relwithdebinfo",
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno"
-			}
-		},
-		{
-			"name": "ynoshell-parent",
-			"hidden": true,
-			"cacheVariables": {
-				"PLAYER_SHELL": "yno",
-				"VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/builds/cmake/Windows.MSVC.toolchain.cmake"
-			}
-		},
-		{
-			"name": "windows-ynoshell-release",
-			"displayName": "Windows (ynoshell) (Release)",
+			"displayName": "Windows (x64) using Visual Studio 2022 (YNO desktop shell, Debug)",
 			"inherits": [
-				"ynoshell-parent",
-				"windows-release"
+				"build-ynoshell",
+				"windows-x64-vs2022-parent",
+				"type-debug"
 			]
 		},
 		{
-			"name": "windows-ynoshell-relwithdebinfo",
-			"displayName": "Windows (ynoshell) (RelWithDebInfo)",
+			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"displayName": "Windows (x64) using Visual Studio 2022 (YNO desktop shell, RelWithDebInfo)",
 			"inherits": [
-				"ynoshell-parent",
-				"windows-relwithdebinfo"
+				"build-ynoshell",
+				"windows-x64-vs2022-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-release",
+			"displayName": "Windows (x64) using Visual Studio 2022 (YNO desktop shell, Release)",
+			"inherits": [
+				"build-ynoshell",
+				"windows-x64-vs2022-parent",
+				"type-release"
+			]
+		},
+		{
+			"name": "windows-x64-vs2022-mp-debug",
+			"displayName": "Windows (x64) using Visual Studio 2022 (Multiplayer, Debug)",
+			"inherits": [
+				"build-mp",
+				"windows-x64-vs2022-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "windows-x64-vs2022-mp-relwithdebinfo",
+			"displayName": "Windows (x64) using Visual Studio 2022 (Multiplayer, RelWithDebInfo)",
+			"inherits": [
+				"build-mp",
+				"windows-x64-vs2022-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "windows-x64-vs2022-mp-release",
+			"displayName": "Windows (x64) using Visual Studio 2022 (Multiplayer, Release)",
+			"inherits": [
+				"build-mp",
+				"windows-x64-vs2022-parent",
+				"type-release"
 			]
 		},
 		{
@@ -822,6 +920,60 @@
 			]
 		},
 		{
+			"name": "macos-ynoshell-debug",
+			"displayName": "macOS (YNO desktop shell, Debug)",
+			"inherits": [
+				"build-ynoshell",
+				"macos-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "macos-ynoshell-relwithdebinfo",
+			"displayName": "macOS (YNO desktop shell, RelWithDebInfo)",
+			"inherits": [
+				"build-ynoshell",
+				"macos-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "macos-ynoshell-release",
+			"displayName": "macOS (YNO desktop shell, Release)",
+			"inherits": [
+				"build-ynoshell",
+				"macos-parent",
+				"type-release"
+			]
+		},
+		{
+			"name": "macos-mp-debug",
+			"displayName": "macOS (Multiplayer, Debug)",
+			"inherits": [
+				"build-mp",
+				"macos-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "macos-mp-relwithdebinfo",
+			"displayName": "macOS (Multiplayer, RelWithDebInfo)",
+			"inherits": [
+				"build-mp",
+				"macos-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "macos-mp-release",
+			"displayName": "macOS (Multiplayer, Release)",
+			"inherits": [
+				"build-mp",
+				"macos-parent",
+				"type-release"
+			]
+		},
+		{
 			"name": "emscripten-parent",
 			"toolchainFile": "$env{EASYRPG_BUILDSCRIPTS}/emscripten/emsdk-portable/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
 			"cacheVariables": {
@@ -908,55 +1060,6 @@
 				"build-sdl2",
 				"emscripten-parent",
 				"type-release"
-			]
-		},
-		{
-			"name": "yno-parent",
-			"hidden": true,
-			"cacheVariables": {
-				"CMAKE_FIND_ROOT_PATH_MODE_LIBRARY": "BOTH",
-				"CMAKE_FIND_ROOT_PATH_MODE_INCLUDE": "BOTH",
-				"CMAKE_FIND_ROOT_PATH_MODE_PACKAGE": "BOTH",
-				"CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-				"CMAKE_PREFIX_PATH": "$env{EASYRPG_BUILDSCRIPTS}/emscripten",
-				"PLAYER_ENABLE_FMMIDI": "OFF",
-				"PLAYER_WITH_MPG123": "OFF",
-				"PLAYER_WITH_LIBSNDFILE": "OFF",
-				"PLAYER_WITH_OGGVORBIS": "OFF",
-				"PLAYER_WITH_WILDMIDI": "OFF",
-				"PLAYER_WITH_FLUIDLITE": "OFF",
-				"PLAYER_WITH_XMP": "OFF",
-				"PLAYER_ENABLE_DRWAV": "OFF",
-				"PLAYER_JS_BUILD_SHELL": "ON",
-				"PLAYER_JS_OUTPUT_NAME": "ynoengine",
-				"PLAYER_JS_GAME_URL": "/data/",
-				"PLAYER_TARGET_PLATFORM": "SDL2",
-				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-			}
-		},
-		{
-			"name": "yno-simd-parent",
-			"hidden": true,
-			"inherits": "yno-parent",
-			"cacheVariables": {
-				"PLAYER_JS_OUTPUT_NAME": "ynoengine-simd",
-				"CMAKE_CXX_FLAGS": "-msimd128"
-			}
-		},
-		{
-			"name": "yno-release",
-			"displayName": "YNOproject (Release)",
-			"inherits": [
-				"emscripten-release",
-				"yno-parent"
-			]
-		},
-		{
-			"name": "yno-simd-release",
-			"displayName": "YNOproject (Release, SIMD)",
-			"inherits": [
-				"emscripten-release",
-				"yno-simd-parent"
 			]
 		},
 		{
@@ -1589,6 +1692,30 @@
 			"configurePreset": "libretro-release"
 		},
 		{
+			"name": "ynoshell-debug",
+			"configurePreset": "ynoshell-debug"
+		},
+		{
+			"name": "ynoshell-relwithdebinfo",
+			"configurePreset": "ynoshell-relwithdebinfo"
+		},
+		{
+			"name": "ynoshell-release",
+			"configurePreset": "ynoshell-release"
+		},
+		{
+			"name": "mp-debug",
+			"configurePreset": "mp-debug"
+		},
+		{
+			"name": "mp-relwithdebinfo",
+			"configurePreset": "mp-relwithdebinfo"
+		},
+		{
+			"name": "mp-release",
+			"configurePreset": "mp-release"
+		},
+		{
 			"name": "linux-debug",
 			"configurePreset": "linux-debug"
 		},
@@ -1654,13 +1781,11 @@
 		},
 		{
 			"name": "windows-relwithdebinfo",
-			"configurePreset": "windows-relwithdebinfo",
-			"configuration": "RelWithDebInfo"
+			"configurePreset": "windows-relwithdebinfo"
 		},
 		{
 			"name": "windows-release",
-			"configurePreset": "windows-release",
-			"configuration": "Release"
+			"configurePreset": "windows-release"
 		},
 		{
 			"name": "windows-sdl3-debug",
@@ -1747,6 +1872,30 @@
 			"configurePreset": "windows-x86-vs2022-libretro-release"
 		},
 		{
+			"name": "windows-x86-vs2022-ynoshell-debug",
+			"configurePreset": "windows-x86-vs2022-ynoshell-debug"
+		},
+		{
+			"name": "windows-x86-vs2022-ynoshell-relwithdebinfo",
+			"configurePreset": "windows-x86-vs2022-ynoshell-relwithdebinfo"
+		},
+		{
+			"name": "windows-x86-vs2022-ynoshell-release",
+			"configurePreset": "windows-x86-vs2022-ynoshell-release"
+		},
+		{
+			"name": "windows-x86-vs2022-mp-debug",
+			"configurePreset": "windows-x86-vs2022-mp-debug"
+		},
+		{
+			"name": "windows-x86-vs2022-mp-relwithdebinfo",
+			"configurePreset": "windows-x86-vs2022-mp-relwithdebinfo"
+		},
+		{
+			"name": "windows-x86-vs2022-mp-release",
+			"configurePreset": "windows-x86-vs2022-mp-release"
+		},
+		{
 			"name": "windows-x64-vs2022-debug",
 			"configurePreset": "windows-x64-vs2022-debug"
 		},
@@ -1795,9 +1944,28 @@
 			"configurePreset": "windows-x64-vs2022-libretro-release"
 		},
 		{
+			"name": "windows-x64-vs2022-ynoshell-debug",
+			"configurePreset": "windows-x64-vs2022-ynoshell-debug"
+		},
+		{
+			"name": "windows-x64-vs2022-ynoshell-relwithdebinfo",
+			"configurePreset": "windows-x64-vs2022-ynoshell-relwithdebinfo"
+		},
+		{
 			"name": "windows-x64-vs2022-ynoshell-release",
-			"configurePreset": "windows-x64-vs2022-ynoshell-release",
-			"configuration": "RelWithDebInfo"
+			"configurePreset": "windows-x64-vs2022-ynoshell-release"
+		},
+		{
+			"name": "windows-x64-vs2022-mp-debug",
+			"configurePreset": "windows-x64-vs2022-mp-debug"
+		},
+		{
+			"name": "windows-x64-vs2022-mp-relwithdebinfo",
+			"configurePreset": "windows-x64-vs2022-mp-relwithdebinfo"
+		},
+		{
+			"name": "windows-x64-vs2022-mp-release",
+			"configurePreset": "windows-x64-vs2022-mp-release"
 		},
 		{
 			"name": "macos-debug",
@@ -1848,6 +2016,30 @@
 			"configurePreset": "macos-libretro-release"
 		},
 		{
+			"name": "macos-ynoshell-debug",
+			"configurePreset": "macos-ynoshell-debug"
+		},
+		{
+			"name": "macos-ynoshell-relwithdebinfo",
+			"configurePreset": "macos-ynoshell-relwithdebinfo"
+		},
+		{
+			"name": "macos-ynoshell-release",
+			"configurePreset": "macos-ynoshell-release"
+		},
+		{
+			"name": "macos-mp-debug",
+			"configurePreset": "macos-mp-debug"
+		},
+		{
+			"name": "macos-mp-relwithdebinfo",
+			"configurePreset": "macos-mp-relwithdebinfo"
+		},
+		{
+			"name": "macos-mp-release",
+			"configurePreset": "macos-mp-release"
+		},
+		{
 			"name": "emscripten-debug",
 			"configurePreset": "emscripten-debug"
 		},
@@ -1882,14 +2074,6 @@
 		{
 			"name": "emscripten-sdl2-release",
 			"configurePreset": "emscripten-sdl2-release"
-		},
-		{
-			"name": "yno-release",
-			"configurePreset": "yno-release"
-		},
-		{
-			"name": "yno-simd-release",
-			"configurePreset": "yno-simd-release"
 		},
 		{
 			"name": "android-armeabi-v7a-debug",

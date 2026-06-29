@@ -51,7 +51,7 @@ public:
 
 	void SetShowAll(bool show_all);
 
-	void OnResolutionChange();
+	void OnResolutionChange() override;
 
 private:
 	bool IsAnyMessageVisible() const;

@@ -33,7 +33,7 @@
 #include "output.h"
 #include "feature.h"
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/chat_overlay.h"
 #endif
 

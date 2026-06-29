@@ -435,7 +435,12 @@ namespace Player {
 
 	/** Name of game emscripten uses */
 	extern std::string emscripten_game_name;
-#endif
+
+	/** Base URL for game asset fetches (set by Scene_ServerBrowser; overrides hardcoded ynoproject.net URL) */
+	extern std::string server_assets_url;
+
+	/** WebSocket sessions base URL (set by Scene_ServerBrowser; used by Web_API::GetSocketURL) */
+	extern std::string server_sessions_url;
 
 #ifdef ENABLE_DYNAMIC_INTERPRETER_CONFIG
 	inline lcf::rpg::SaveEventExecState::EasyRpgStateRuntime_Flags interpreter_default_flags{};

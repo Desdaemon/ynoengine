@@ -9,6 +9,7 @@
 #include <functional>
 #include <type_traits>
 #include <string>
+#include <cstdint>
 
 #include "packet.h"
 

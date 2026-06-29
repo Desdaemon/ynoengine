@@ -86,9 +86,11 @@ public:
 	/** begin populating Input::text_input and Input::composition */
 	void BeginTextCapture(Rect* textbox = nullptr) override;
 	void EndTextCapture() override;
+#ifdef PLAYER_YNO
 	void Dispatch(Intent) override;
 	webview::webview& GetWebview();
 	void SetWebviewLayout(WebviewLayout) override;
+#endif
 
 	/** @} */
 
@@ -163,6 +165,7 @@ private:
 	std::unique_ptr<AudioInterface> audio_;
 #endif
 
+#ifdef PLAYER_YNO
 	std::unique_ptr<webview::webview> webview;
 	std::thread webview_thread;
 	bool webview_visible = true;
@@ -170,8 +173,11 @@ private:
 	Rect webview_dims{};
 	void ModifyViewport();
 	void LayoutWebview();
+#endif
 };
 
+#ifdef PLAYER_YNO
 inline webview::webview& Sdl2Ui::GetWebview() { return *webview.get(); }
+#endif
 
 #endif

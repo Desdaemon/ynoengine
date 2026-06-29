@@ -43,7 +43,7 @@
 #include "yno_connection.h"
 #include "messages.h"
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include <functional>
 #  include <cpr/cpr.h>
 #  include <nlohmann/json.hpp>
@@ -154,13 +154,16 @@ static std::string get_room_url(int room_id, std::string_view session_token) {
 void Game_Multiplayer::InitConnection() {
 	using YSM = YNOConnection::SystemMessage;
 	using MCo = Multiplayer::Connection;
+#ifdef PLAYER_MP
+	connection.need_header = false;
+#endif
 	connection.RegisterSystemHandler(YSM::OPEN, [this] (MCo& c) {
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		Graphics::GetStatusOverlay().MarkDirty();
 #endif
 	});
 	connection.RegisterSystemHandler(YSM::CLOSE, [this] (MCo& c) {
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		Graphics::GetStatusOverlay().MarkDirty();
 #endif
 		if (session_active) {
@@ -173,7 +176,7 @@ void Game_Multiplayer::InitConnection() {
 	connection.RegisterSystemHandler(YSM::EXIT, [this] (MCo& c) {
 		// an exit happens outside ynoclient
 		// resume with SessionReady()
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		Graphics::GetStatusOverlay().MarkDirty();
 #endif
 		Output::Debug("MP: socket exited with code 1028");
@@ -183,20 +186,24 @@ void Game_Multiplayer::InitConnection() {
 	using namespace Messages::S2C;
 	connection.RegisterHandler<SyncPlayerDataPacket>("s", [this] (SyncPlayerDataPacket& p) {
 		host_id = p.host_id;
+		#if PLAYER_YNO
 		auto key_num = std::stoul(p.key);
 		//if (key_num > std::numeric_limits<uint32_t>::max()) {
 		//	std::terminate();
 		//}
 		connection.SetKey(key_num);
+		#endif
 		Web_API::UpdateConnectionStatus(1); // connected;
 		session_connected = true;
 		SendBasicData();
-		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals);
 #ifdef PLAYER_YNO
+		Web_API::SyncPlayerData(p.uuid, p.rank, p.account_bin, p.badge, p.medals);
 		auto& player = playerdata[p.uuid];
 		player.rank = p.rank;
 		player.badge = p.badge;
 		player.account = p.account_bin == 1;
+#else
+		connection.SendPacketAsync<Messages::C2S::SessionPlayerName>("Des");
 #endif
 	});
 	connection.RegisterHandler<RoomInfoPacket>("ri", [this] (RoomInfoPacket& p) {
@@ -314,7 +321,13 @@ void Game_Multiplayer::InitConnection() {
 		Web_API::OnPlayerDisconnect(p.id);
 	});
 	connection.RegisterHandler<MovePacket>("m", [this] (MovePacket& p) {
-		if (players.find(p.id) == players.end()) return;
+		if (players.find(p.id) == players.end()) {
+			#ifdef PLAYER_YNO
+			return;
+			#else
+			SpawnOtherPlayer(p.id);
+			#endif
+		}
 		auto& player = players[p.id];
 		int x = Utils::Clamp(p.x, 0, Game_Map::GetTilesX() - 1);
 		int y = Utils::Clamp(p.y, 0, Game_Map::GetTilesY() - 1);
@@ -507,7 +520,7 @@ void Game_Multiplayer::InitConnection() {
 		DrawableMgr::SetLocalList(old_list);
 
 		Web_API::OnPlayerNameUpdated(p.name, p.id);
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		if (auto pdata = playerdata.find(player.uuid); pdata != playerdata.end()) {
 			pdata->second.name = p.name;
 		}
@@ -532,9 +545,11 @@ void Game_Multiplayer::InitConnection() {
 				auto& entry = playerdata[(std::string)it["uuid"]];
 				entry.name = it["name"];
 				entry.systemName = it["systemName"];
+				#ifdef PLAYER_YNO
 				entry.rank = it["rank"];
 				entry.account = it["account"];
 				entry.badge = it["badge"];
+				#endif
 			}
 
 			const auto& messages = chatmsgs["messages"];
@@ -549,9 +564,11 @@ void Game_Multiplayer::InitConnection() {
 				if (auto player = playerdata.find(uuid); player != playerdata.end()) {
 					name = player->second.name;
 					system = player->second.systemName;
+					#ifdef PLAYER_YNO
 					badge = player->second.badge;
 					account = player->second.account;
 					rank = player->second.rank;
+					#endif
 				}
 				std::string contents((*it)["contents"]);
 				chatoverlay.AddMessage(contents, name, uuid, system, badge, account, true, rank);
@@ -582,9 +599,11 @@ void Game_Multiplayer::InitConnection() {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
+			#ifdef PLAYER_YNO
 			badge = player->second.badge;
 			account = player->second.account;
 			rank = player->second.rank;
+			#endif
 		}
 		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, true, rank);
 		lastmsgid = p.msgid;
@@ -599,9 +618,11 @@ void Game_Multiplayer::InitConnection() {
 			if (!player->second.name.empty())
 				name = player->second.name;
 			system = player->second.systemName;
+			#ifdef PLAYER_YNO
 			badge = player->second.badge;
 			account = player->second.account;
 			rank = player->second.rank;
+			#endif
 		}
 		Graphics::GetChatOverlay().AddMessage(p.msg, name, p.uuid, system, badge, account, false, rank);
 	});
@@ -609,9 +630,11 @@ void Game_Multiplayer::InitConnection() {
 		auto& player = playerdata[p.uuid];
 		player.name = p.name;
 		player.systemName = p.systemName;
+		#ifdef PLAYER_YNO
 		player.rank = p.rank;
 		player.account = p.account;
 		player.badge = p.badge;
+		#endif
 	});
 	sessionConn.RegisterHandler<SessionPlayerCount>("pc", [this](SessionPlayerCount& p) {
 		Graphics::GetStatusOverlay().SetPlayerCount(p.player_count);
@@ -624,10 +647,10 @@ namespace C2S = Messages::C2S;
 void Game_Multiplayer::Connect(int map_id, bool room_switch) {
 	Output::Debug("MP: connecting to id={}", map_id);
 	room_id = map_id;
-	if (!session_active) {
-		Output::Debug("MP: session_active == false, refusing to connect");
-		return;
-	}
+	// if (!session_active) {
+	// 	Output::Debug("MP: session_active == false, refusing to connect");
+	// 	return;
+	// }
 	switching_room = true;
 	if (room_switch) {
 		switched_room = false;
@@ -679,10 +702,12 @@ void Game_Multiplayer::Initialize() {
 }
 
 void Game_Multiplayer::InitSession() {
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
+#  ifdef PLAYER_YNO
 	if (!session_token.empty() || !cfg.session_token.Get().empty()) {
 		CheckLogin(false);
 	}
+#  endif
 
 	sessionConn.need_header = false;
 	sessionConn.Open(GetSessionEndpoint());

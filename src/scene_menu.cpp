@@ -36,7 +36,7 @@
 #include "bitmap.h"
 #include "feature.h"
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/scene_online.h"
 #  include "graphics.h"
 #  include "multiplayer/status_overlay.h"
@@ -60,7 +60,7 @@ void Scene_Menu::Start() {
 	// Status Window
 	menustatus_window.reset(new Window_MenuStatus(Player::menu_offset_x + menu_command_width, Player::menu_offset_y, (MENU_WIDTH - menu_command_width), MENU_HEIGHT));
 	menustatus_window->SetActive(false);
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	Graphics::GetStatusOverlay().MarkDirty(true);
 #endif
 }
@@ -68,7 +68,7 @@ void Scene_Menu::Start() {
 void Scene_Menu::Continue(SceneType /* prev_scene */) {
 	menustatus_window->Refresh();
 	gold_window->Refresh();
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	Graphics::GetStatusOverlay().MarkDirty(true);
 #endif
 }
@@ -101,7 +101,7 @@ void Scene_Menu::CreateCommandWindow() {
 		if (Player::debug_flag) {
 			command_options.push_back(Debug);
 		}
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		command_options.push_back(Online);
 #endif
 		command_options.push_back(Quit);
@@ -130,7 +130,7 @@ void Scene_Menu::CreateCommandWindow() {
 		if (Player::debug_flag) {
 			command_options.push_back(Debug);
 		}
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		command_options.push_back(Online);
 #endif
 		command_options.push_back(Quit);
@@ -270,7 +270,7 @@ void Scene_Menu::UpdateCommand() {
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
 			Scene::Push(std::make_shared<Scene_Debug>());
 			break;
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 		case Online:
 			Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
 			Scene::Push(std::make_shared<Scene_Settings>(Window_Settings::eOnlineAccount));

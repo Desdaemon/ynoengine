@@ -30,7 +30,7 @@
 #include "drawable_mgr.h"
 #include "baseui.h"
 #include "game_clock.h"
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/chat_overlay.h"
 #  include "multiplayer/status_overlay.h"
 #endif
@@ -44,7 +44,7 @@ namespace Graphics {
 
 	std::unique_ptr<MessageOverlay> message_overlay;
 	std::unique_ptr<FpsOverlay> fps_overlay;
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 	std::unique_ptr<ChatOverlay> chat_overlay;
 	std::unique_ptr<StatusOverlay> status_overlay;
 #endif
@@ -164,7 +164,7 @@ MessageOverlay& Graphics::GetMessageOverlay() {
 	return *message_overlay;
 }
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 ChatOverlay& Graphics::GetChatOverlay() {
 	return *chat_overlay;
 }

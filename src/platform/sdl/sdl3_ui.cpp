@@ -650,11 +650,32 @@ void Sdl3Ui::UpdateDisplay() {
 			do_stretch();
 			SDL_SetRenderViewport(sdl_renderer, &viewport);
 		}
+
+		screen_surface = Bitmap::Create(viewport.w, viewport.h, true, main_surface->pitch());
+
+		if (sdl_texture_screen)
+			SDL_DestroyTexture(sdl_texture_screen);
+		sdl_texture_screen = SDL_CreateTexture(sdl_renderer, texture_format, SDL_TEXTUREACCESS_STREAMING,
+			screen_surface->width(), screen_surface->height());
+		if (!sdl_texture_screen)
+			Output::Warning("failed to create screen texture: {}", SDL_GetError());
+		else
+			Output::Debug("sdl_texture_screen: {}", SDL_GetPixelFormatName(texture_format));
+
+		for (auto& it : Drawable::screen_drawables)
+			it->OnResolutionChange();
 	}
 
 	SDL_UpdateTexture(sdl_texture_game, nullptr, main_surface->pixels(), main_surface->pitch());
 	SDL_RenderClear(sdl_renderer);
 	SDL_RenderTexture(sdl_renderer, sdl_texture_game, nullptr, nullptr);
+
+	if (screen_surface && sdl_texture_screen) {
+		SDL_UpdateTexture(sdl_texture_screen, nullptr, screen_surface->pixels(), screen_surface->pitch());
+		SDL_SetTextureBlendMode(sdl_texture_screen, SDL_BLENDMODE_BLEND);
+		SDL_RenderTexture(sdl_renderer, sdl_texture_screen, nullptr, nullptr);
+	}
+
 	SDL_RenderPresent(sdl_renderer);
 }
 

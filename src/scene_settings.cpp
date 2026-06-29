@@ -44,7 +44,7 @@
 #  include <emscripten.h>
 #endif
 
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 #  include "multiplayer/game_multiplayer.h"
 #endif
 

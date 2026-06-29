@@ -28,7 +28,7 @@
 
 class MessageOverlay;
 class Scene;
-#ifdef PLAYER_YNO
+#ifdef PLAYER_MP
 class ChatOverlay;
 class StatusOverlay;
 #endif
