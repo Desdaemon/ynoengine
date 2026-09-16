@@ -113,9 +113,12 @@ static bool MovePlayerToPos(Game_PlayerOther& player, int x, int y) {
 
 void Game_Multiplayer::ResetRepeatingFlash() {
 	repeating_flash_active = false;
+	flash_this_frame = false;
 	frame_index = 0;
 	last_flash_frame_index = -1;
-	last_flash_frame_flash.fill(0);
+	pending_flash.fill(0);
+	last_frame_flash.fill(0);
+	repeating_flash_sent.fill(0);
 	repeating_flashes.clear();
 }
 
@@ -309,6 +312,9 @@ void Game_Multiplayer::InitConnection() {
 		if (players.find(p.id) == players.end()) return;
 		auto& player = players[p.id];
 		player.ch->Flash(p.r, p.g, p.b, p.p, p.f);
+		if (player.chat_name) {
+			player.chat_name->SetFlashFramesLeft(p.f);
+		}
 	});
 	connection.RegisterHandler<RepeatingFlashPacket>("rfl", [this] (RepeatingFlashPacket& p) {
 		if (players.find(p.id) == players.end()) return;
@@ -570,19 +576,49 @@ void Game_Multiplayer::MainPlayerJumped(int x, int y) {
 }
 
 void Game_Multiplayer::MainPlayerFlashed(int r, int g, int b, int p, int f) {
-	std::array<int, 5> flash_array = std::array<int, 5>{ r, g, b, p, f };
-	if (last_flash_frame_index > -1
-			&& frame_index - last_flash_frame_index <= 1
-			&& last_flash_frame_flash == flash_array) {
-		if (!repeating_flash_active) {
+	// only the last flash of a frame stays visible, so SyncPlayerFlash sends it
+	pending_flash = std::array<int, 5>{ r, g, b, p, f };
+	flash_this_frame = true;
+}
+
+void Game_Multiplayer::SyncPlayerFlash() {
+	// a parallel page ending in "Wait 0.0" runs its flash on every other frame
+	constexpr int max_repeating_flash_gap = 2;
+	const int gap = frame_index - last_flash_frame_index;
+
+	auto stop_repeating = [this] () {
+		if (repeating_flash_active) {
+			repeating_flash_active = false;
+			connection.SendPacketAsync<RemoveRepeatingFlashPacket>();
+		}
+	};
+
+	if (!flash_this_frame) {
+		// no flash command this frame yet, but allow a grace period before sending rrfl
+		if (gap > max_repeating_flash_gap) {
+			stop_repeating();
+		}
+		return;
+	}
+
+	if (last_flash_frame_index > -1 && gap <= max_repeating_flash_gap
+			&& (repeating_flash_active || last_frame_flash == pending_flash)) {
+		// refresh rfl if it has changed, due to per-frame flashing effects
+		if (!repeating_flash_active || repeating_flash_sent != pending_flash) {
 			repeating_flash_active = true;
-			connection.SendPacketAsync<RepeatingFlashPacket>(r, g, b, p, f);
+			repeating_flash_sent = pending_flash;
+			connection.SendPacketAsync<RepeatingFlashPacket>(pending_flash[0], pending_flash[1],
+					pending_flash[2], pending_flash[3], pending_flash[4]);
 		}
 	} else {
-		connection.SendPacketAsync<FlashPacket>(r, g, b, p, f);
+		stop_repeating();
+		connection.SendPacketAsync<FlashPacket>(pending_flash[0], pending_flash[1],
+				pending_flash[2], pending_flash[3], pending_flash[4]);
 	}
+
+	last_frame_flash = pending_flash;
 	last_flash_frame_index = frame_index;
-	last_flash_frame_flash = flash_array;
+	flash_this_frame = false;
 }
 
 void Game_Multiplayer::MainPlayerChangedTransparency(int transparency) {
@@ -751,7 +787,9 @@ void Game_Multiplayer::ApplyRepeatingFlashes() {
 		if (players.find(rf.first) != players.end()) {
 			std::array<int, 5> flash_array = rf.second;
 			players[rf.first].ch->Flash(flash_array[0], flash_array[1], flash_array[2], flash_array[3], flash_array[4]);
-			players[rf.first].chat_name->SetFlashFramesLeft(flash_array[4]);
+			if (players[rf.first].chat_name) {
+				players[rf.first].chat_name->SetFlashFramesLeft(flash_array[4]);
+			}
 		}
 	}
 }
@@ -781,12 +819,7 @@ void Game_Multiplayer::ApplyScreenTone() {
 
 void Game_Multiplayer::Update() {
 	if (session_active) {
-		if (repeating_flash_active && frame_index > last_flash_frame_index) {
-			connection.SendPacketAsync<RemoveRepeatingFlashPacket>();
-			repeating_flash_active = false;
-			last_flash_frame_index = -1;
-			last_flash_frame_flash.fill(0);
-		}
+		SyncPlayerFlash();
 
 		++frame_index;
 

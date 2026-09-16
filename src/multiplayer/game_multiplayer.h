@@ -89,9 +89,12 @@ public:
 	std::vector<std::string> global_sync_picture_prefixes;
 	std::map<int, bool> sync_picture_cache;
 	std::vector<int> sync_battle_anim_ids;
-	bool repeating_flash_active;
+	bool flash_this_frame{false};
+	bool repeating_flash_active{false};
 	int last_flash_frame_index{-1};
-	std::array<int, 5> last_flash_frame_flash;
+	std::array<int, 5> pending_flash{};
+	std::array<int, 5> last_frame_flash{};
+	std::array<int, 5> repeating_flash_sent{};
 	std::map<int, std::array<int, 5>> repeating_flashes;
 
 	int cu_randint;
@@ -101,6 +104,7 @@ public:
 	int cu_precipitation;
 
 	void SpawnOtherPlayer(int id);
+	void SyncPlayerFlash();
 	void ResetRepeatingFlash();
 	void InitConnection();
 	void SendShownPictures();
