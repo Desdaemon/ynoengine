@@ -1262,7 +1262,8 @@ inline bool Game_Character::IsMoving() const {
 }
 
 inline bool Game_Character::IsStopping() const {
-	return !(IsMoving() || IsJumping());
+	// RPG_RT does not consult the jump flag here.
+	return GetRemainingStep() <= 0;
 }
 
 inline int Game_Character::GetBeginJumpX() const {
