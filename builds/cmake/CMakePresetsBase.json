@@ -112,7 +112,21 @@
 			"toolchainFile": "$env{EASYRPG_BUILDSCRIPTS_SIMD}/emscripten/emsdk-portable/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
 			"cacheVariables": {
 				"PLAYER_JS_OUTPUT_NAME": "ynoengine-simd",
-				"CMAKE_CXX_FLAGS": "-msimd128"
+				"CMAKE_CXX_FLAGS": "-msimd128",
+				"PLAYER_PREFIX_PATH_APPEND": "$env{EASYRPG_BUILDSCRIPTS_SIMD}/emscripten"
+			}
+		},
+		{
+			"name": "build-yno-worklet",
+			"displayName": "builds for YNO (SDL2, SIMD, AudioWorklet)",
+			"hidden": true,
+			"inherits": "build-yno",
+			"toolchainFile": "$env{EASYRPG_BUILDSCRIPTS_SIMD_PTHREAD}/emscripten/emsdk-portable/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+			"cacheVariables": {
+				"PLAYER_JS_OUTPUT_NAME": "ynoengine-worklet",
+				"CMAKE_CXX_FLAGS": "-msimd128",
+				"PLAYER_PREFIX_PATH_APPEND": "$env{EASYRPG_BUILDSCRIPTS_SIMD_PTHREAD}/emscripten",
+				"PLAYER_JS_AUDIO_WORKLETS": "ON"
 			}
 		},
 		{

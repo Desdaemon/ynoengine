@@ -901,6 +901,33 @@
 			]
 		},
 		{
+			"name": "emscripten-yno-worklet-debug",
+			"displayName": "Emscripten Web (YNO [SIMD, AudioWorklet], Debug)",
+			"inherits": [
+				"build-yno-worklet",
+				"emscripten-parent",
+				"type-debug"
+			]
+		},
+		{
+			"name": "emscripten-yno-worklet-relwithdebinfo",
+			"displayName": "Emscripten Web (YNO [SIMD, AudioWorklet], RelWithDebInfo)",
+			"inherits": [
+				"build-yno-worklet",
+				"emscripten-parent",
+				"type-relwithdebinfo"
+			]
+		},
+		{
+			"name": "emscripten-yno-worklet-release",
+			"displayName": "Emscripten Web (YNO [SIMD, AudioWorklet], Release)",
+			"inherits": [
+				"build-yno-worklet",
+				"emscripten-parent",
+				"type-release"
+			]
+		},
+		{
 			"name": "android-armeabi-v7a-parent",
 			"cacheVariables": {
 				"CMAKE_ANDROID_ARCH_ABI": "armeabi-v7a",
@@ -1840,6 +1867,18 @@
 		{
 			"name": "emscripten-yno-simd-release",
 			"configurePreset": "emscripten-yno-simd-release"
+		},
+		{
+			"name": "emscripten-yno-worklet-debug",
+			"configurePreset": "emscripten-yno-worklet-debug"
+		},
+		{
+			"name": "emscripten-yno-worklet-relwithdebinfo",
+			"configurePreset": "emscripten-yno-worklet-relwithdebinfo"
+		},
+		{
+			"name": "emscripten-yno-worklet-release",
+			"configurePreset": "emscripten-yno-worklet-release"
 		},
 		{
 			"name": "android-armeabi-v7a-debug",

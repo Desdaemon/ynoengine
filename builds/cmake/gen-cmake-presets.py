@@ -30,6 +30,7 @@ platform_display = {
 	"libretro": "libretro core",
 	"yno": "YNO",
 	"yno-simd": "YNO [SIMD]",
+	"yno-worklet": "YNO [SIMD, AudioWorklet]",
 }
 
 # This creates the following configurePresets from the one in the template:

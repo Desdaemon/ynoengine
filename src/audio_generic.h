@@ -70,6 +70,7 @@ public:
 	virtual void UnlockMutex() const = 0;
 
 	void Decode(uint8_t* output_buffer, int buffer_length);
+	void Decode(float* output_buffer, int buffer_length);
 
 private:
 	struct BgmChannel {
@@ -78,6 +79,8 @@ private:
 		GenericAudio* instance = nullptr;
 		bool paused;
 		bool stopped;
+		// Set by the mixer for the main thread to reap
+		bool dead = false;
 		bool midi_out_used = false;
 		void Stop();
 		void SetPaused(bool newPaused);
@@ -94,6 +97,7 @@ private:
 		GenericAudio* instance = nullptr;
 		bool paused;
 		bool stopped;
+		bool dead = false;
 	};
 	struct Format {
 		int frequency;
@@ -104,6 +108,7 @@ private:
 
 	bool PlayOnChannel(BgmChannel& chan, Filesystem_Stream::InputStream stream, int volume, int pitch, int fadein, int balance);
 	bool PlayOnChannel(SeChannel& chan, std::unique_ptr<AudioSeCache> se, int volume, int pitch, int balance);
+	void SweepDeadChannels();
 
 	static constexpr unsigned nr_of_se_channels = 31;
 	static constexpr unsigned nr_of_bgm_channels = 2;
@@ -118,6 +123,12 @@ private:
 	std::vector<float> mixer_buffer = {};
 
 	std::unique_ptr<GenericAudioMidiOut> midi_thread;
+	typedef struct DecodeResult {
+		bool channel_active;
+		float total_volume;
+		int samples_per_frame;
+	} DecodeResult;
+	DecodeResult Decode(int buffer_length);
 };
 
 #endif

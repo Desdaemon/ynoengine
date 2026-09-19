@@ -30,6 +30,9 @@
 #  include <SDL_system.h>
 #elif defined(__EMSCRIPTEN__)
 #  include <emscripten.h>
+#  ifdef SUPPORT_AUDIO_WORKLET
+#    include "platform/emscripten/audio.h"
+#  endif
 #elif defined(__WIIU__)
 #  include "platform/wiiu/main.h"
 #endif
@@ -204,6 +207,15 @@ Sdl2Ui::Sdl2Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 #ifdef SUPPORT_AUDIO
 #  ifdef AUDIO_AESND
 		audio_ = std::make_unique<WiiAudio>(cfg.audio);
+#  elif defined(SUPPORT_AUDIO_WORKLET)
+		// The worklet shares memory with its threads, which the browser only permits
+		// on a cross-origin isolated page
+		if (EmscriptenAudio::Supported()) {
+			audio_ = std::make_unique<EmscriptenAudio>(cfg.audio);
+		} else {
+			Output::Debug("Audio: page is not cross-origin isolated, falling back to SDL2");
+			audio_ = std::make_unique<Sdl2Audio>(cfg.audio);
+		}
 #  else
 		audio_ = std::make_unique<Sdl2Audio>(cfg.audio);
 #  endif
